@@ -14,7 +14,7 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- Vue 3 CDN -->
     <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
-    <!-- JSZip CDN (ZIP 파일 압축 해제 라이브러리) -->
+    <!-- JSZip CDN -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 
     <style>
@@ -40,15 +40,13 @@
                     <h1 class="text-2xl font-bold text-slate-900">리을의 영어정복 🌸</h1>
                     <p class="text-sm font-semibold text-slate-500">미완료 진도는 차례대로 해금됩니다.</p>
                 </div>
-                <!-- JSON/ZIP Status & Action Button -->
+                <!-- Status & Action Button -->
                 <div class="flex flex-wrap items-center gap-2.5">
-                    <!-- Saved Info Badge -->
                     <div v-if="allWords.length > 0" class="flex flex-col items-start sm:items-end bg-emerald-50 border border-emerald-200 px-3 py-1.5 rounded-xl text-xs">
                         <span class="font-bold text-emerald-700">🟢 저장 단어수: {{ allWords.length }}개</span>
                         <span v-if="savedDate" class="text-[11px] text-slate-500 font-medium">저장일자: {{ savedDate }}</span>
                     </div>
 
-                    <!-- Open File Modal Button -->
                     <button @click="openConfirmModal" class="bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200 px-4 py-2.5 rounded-xl text-sm font-bold shadow-sm transition flex items-center gap-1">
                         <span>{{ allWords.length > 0 ? '🔄 단어장 변경' : '📦 ZIP / JSON 불러오기' }}</span>
                     </button>
@@ -56,14 +54,14 @@
                 </div>
             </div>
 
-            <!-- Empty State (No File Loaded) -->
+            <!-- Empty State -->
             <div v-if="allWords.length === 0" class="bg-white p-10 rounded-2xl shadow-sm text-center space-y-4">
                 <div class="text-6xl text-purple-500">📦</div>
                 <h2 class="text-xl font-bold">저장된 단어장이 없습니다</h2>
                 <p class="text-slate-500 font-medium">상단의 <b>[ZIP / JSON 불러오기]</b> 버튼을 누르고 ZIP 또는 JSON 파일을 고르면<br>내부에 <b>자동 영구 저장</b>되어 다음부터는 바로 공부할 수 있습니다!</p>
             </div>
 
-            <!-- Dashboard (File Loaded) -->
+            <!-- Dashboard -->
             <div v-else class="space-y-6">
                 <!-- Overall Progress -->
                 <div class="bg-white p-6 rounded-2xl shadow-sm space-y-4">
@@ -169,7 +167,7 @@
                             <span class="font-bold text-slate-800 text-sm">{{ w.english }}</span>
                             <span class="text-xs text-slate-500 ml-2">{{ w.meaning }}</span>
                         </div>
-                        <button @click="speak(w.english)" class="text-purple-600 p-1">🔊</button>
+                        <button @click="speak(w.english, 0.7)" class="text-purple-600 p-1">🔊</button>
                     </div>
                 </div>
                 <div class="flex gap-3">
@@ -200,60 +198,59 @@
                 <div class="bg-white p-4 rounded-2xl shadow-sm border border-slate-100 flex-1 flex flex-col justify-between">
                     
                     <!-- STAGE 1: Listening & Typing 3 Times -->
-                    <div v-if="currentMode === 'practice'" class="space-y-3">
-                        <div class="text-center bg-rose-50 border border-rose-200 py-1 px-3 rounded-full text-xs font-bold text-rose-600 w-fit mx-auto">
+                    <div v-if="currentMode === 'practice'" class="space-y-3.5">
+                        <div class="text-center bg-rose-50 border border-rose-200 py-1.5 px-4 rounded-full text-sm font-bold text-rose-600 w-fit mx-auto">
                             1단계: 듣고 따라 입력하기 🎀
                         </div>
 
                         <!-- Row Layout: Image (Left) + Word Info & Example (Right) -->
-                        <div class="grid grid-cols-1 md:grid-cols-2 gap-3 items-stretch">
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-3.5 items-stretch">
                             <!-- Image Display (Left) -->
-                            <div class="w-full h-36 md:h-44 bg-slate-50 rounded-xl overflow-hidden flex items-center justify-center border border-slate-100">
+                            <div class="w-full h-36 md:h-44 bg-slate-50 rounded-2xl overflow-hidden flex items-center justify-center border border-slate-100">
                                 <img :src="getWordImage(currentWord)" class="max-h-full object-contain" @error="handleImgError">
                             </div>
 
                             <!-- Word Info (Right) -->
                             <div class="flex flex-col justify-between gap-2">
-                                <div class="bg-slate-50 p-2.5 rounded-xl text-center space-y-0.5">
+                                <div class="bg-slate-50 p-3 rounded-2xl text-center space-y-1 border border-slate-100">
                                     <div class="flex items-center justify-center gap-2">
-                                        <span class="text-3xl font-black text-slate-900">{{ currentWord.english }}</span>
-                                        <button @click="speak(currentWord.english)" class="bg-purple-100 p-2 rounded-full text-purple-700 text-base hover:bg-purple-200">🔊</button>
+                                        <span class="text-3xl md:text-4xl font-black text-slate-900">{{ currentWord.english }}</span>
+                                        <button @click="speak(currentWord.english, 0.75)" class="bg-purple-100 p-2.5 rounded-full text-purple-700 text-lg hover:bg-purple-200 shadow-sm transition">🔊</button>
                                     </div>
-                                    <div class="text-lg font-bold text-rose-500">{{ currentWord.meaning }}</div>
+                                    <div class="text-xl md:text-2xl font-bold text-rose-500">{{ currentWord.meaning }}</div>
                                 </div>
 
-                                <!-- Example Sentence -->
-                                <div v-if="currentWord.example" class="bg-white border border-slate-200 p-2.5 rounded-xl text-left space-y-1">
+                                <!-- Example Sentence (확대된 폰트 및 슬로우 TTS) -->
+                                <div v-if="currentWord.example" class="bg-white border border-slate-200 p-3 rounded-2xl text-left space-y-1.5 shadow-sm">
                                     <div class="flex justify-between items-center">
-                                        <span class="text-[11px] font-bold text-slate-400">💬 오늘의 예문</span>
-                                        <button @click="speak(currentWord.example)" class="text-purple-600 hover:text-purple-800 font-bold text-xs flex items-center gap-1 bg-purple-50 px-2 py-0.5 rounded-md border border-purple-100">
-                                            🔊 예문 듣기
+                                        <span class="text-xs md:text-sm font-bold text-slate-500">💬 오늘의 예문</span>
+                                        <button @click="speak(currentWord.example, 0.65)" class="text-purple-700 hover:text-purple-900 font-bold text-xs md:text-sm flex items-center gap-1 bg-purple-50 hover:bg-purple-100 px-2.5 py-1 rounded-lg border border-purple-200 transition">
+                                            🔊 천천히 듣기
                                         </button>
                                     </div>
-                                    <div class="text-xs font-bold text-slate-800">{{ currentWord.example }}</div>
-                                    <div class="text-[11px] font-semibold text-slate-500">{{ currentWord.exampleMeaning }}</div>
+                                    <div class="text-sm md:text-base font-bold text-slate-800 leading-snug">{{ currentWord.example }}</div>
+                                    <div class="text-xs md:text-sm font-semibold text-slate-600">{{ currentWord.exampleMeaning }}</div>
                                 </div>
                             </div>
                         </div>
 
                         <!-- Realtime Feedback Chips & Input -->
-                        <div class="space-y-2 bg-purple-50/50 p-3 rounded-xl border border-purple-100">
-                            <div class="flex justify-between items-center text-xs font-bold">
-                                <span>⌨️ 입력 후 [엔터]를 누르세요 ({{ practiceCount }}/3회)</span>
-                                <button v-if="practiceText" @click="practiceText = ''" class="text-rose-500 text-xs">초기화</button>
+                        <div class="space-y-2.5 bg-purple-50/60 p-3.5 rounded-2xl border border-purple-100">
+                            <div class="flex justify-between items-center text-sm font-bold text-slate-700">
+                                <span>⌨️ 입력 후 [확인] 또는 엔터를 누르세요 ({{ practiceCount }}/3회)</span>
                             </div>
 
                             <!-- Realtime Chars -->
-                            <div class="flex gap-1.5 min-h-[38px] items-center overflow-x-auto py-0.5">
-                                <span v-if="practiceText.length === 0" class="text-xs font-semibold text-slate-400">키보드로 영단어를 입력 후 엔터...</span>
+                            <div class="flex gap-1.5 min-h-[42px] items-center overflow-x-auto py-0.5">
+                                <span v-if="practiceText.length === 0" class="text-sm font-semibold text-slate-400">알파벳을 입력해보세요...</span>
                                 <span v-else v-for="(char, idx) in practiceText.split('')" :key="idx"
-                                      class="w-8 h-9 flex items-center justify-center rounded-lg font-mono font-black text-lg shadow-sm border-2"
+                                      class="w-9 h-10 flex items-center justify-center rounded-lg font-mono font-black text-xl shadow-sm border-2"
                                       :class="isCharCorrect(char, idx) ? 'bg-green-100 text-green-700 border-green-500' : 'bg-rose-500 text-white border-rose-600'">
                                     {{ char }}
                                 </span>
                             </div>
 
-                            <!-- Input Field & Submit Button -->
+                            <!-- Input Field & Clear/Submit Buttons -->
                             <div class="flex gap-2">
                                 <input ref="practiceInput"
                                        v-model="practiceText"
@@ -263,62 +260,70 @@
                                        autocapitalize="off"
                                        autocorrect="off"
                                        spellcheck="false"
-                                       placeholder="알파벳 입력 후 엔터(Enter)"
-                                       class="flex-1 h-11 px-3 bg-amber-50 border-2 border-purple-400 rounded-xl font-bold text-xl text-slate-900 focus:outline-none focus:border-purple-600">
-                                <button @click="submitPractice" class="bg-purple-600 hover:bg-purple-700 text-white font-bold px-4 rounded-xl text-sm shadow-md flex-shrink-0">
+                                       placeholder="알파벳 입력"
+                                       class="flex-1 h-12 px-3.5 bg-white border-2 border-purple-400 rounded-xl font-bold text-xl text-slate-900 focus:outline-none focus:border-purple-600 shadow-inner">
+                                <button @click="clearPracticeInput" class="bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold px-3.5 rounded-xl text-sm transition flex-shrink-0 shadow-sm">
+                                    🔄 초기화
+                                </button>
+                                <button @click="submitPractice" class="bg-purple-600 hover:bg-purple-700 text-white font-bold px-5 rounded-xl text-sm shadow-md flex-shrink-0 transition">
                                     확인
                                 </button>
                             </div>
 
                             <!-- Progress Dots -->
-                            <div class="flex justify-center gap-2 pt-0.5">
+                            <div class="flex justify-center gap-2 pt-1">
                                 <div v-for="i in 3" :key="i"
-                                     class="w-3.5 h-3.5 rounded-full transition-all"
-                                     :class="i <= practiceCount ? 'bg-green-500' : 'bg-slate-200'">
+                                     class="w-4 h-4 rounded-full transition-all"
+                                     :class="i <= practiceCount ? 'bg-green-500 scale-110' : 'bg-slate-200'">
                                 </div>
                             </div>
                         </div>
                     </div>
 
                     <!-- STAGE 2: Spelling Quiz -->
-                    <div v-else class="space-y-3">
-                        <div class="text-center bg-purple-100 text-purple-700 py-1 px-3 rounded-full text-xs font-bold w-fit mx-auto">
+                    <div v-else class="space-y-3.5">
+                        <div class="text-center bg-purple-100 text-purple-700 py-1.5 px-4 rounded-full text-sm font-bold w-fit mx-auto">
                             2단계: 스펠링 테스트 🎯
                         </div>
 
-                        <div class="grid grid-cols-1 md:grid-cols-2 gap-3 items-center">
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-3.5 items-center">
                             <!-- Image Display (Left) -->
-                            <div class="w-full h-36 md:h-44 bg-slate-50 rounded-xl overflow-hidden flex items-center justify-center border border-slate-100">
+                            <div class="w-full h-36 md:h-44 bg-slate-50 rounded-2xl overflow-hidden flex items-center justify-center border border-slate-100">
                                 <img :src="getWordImage(currentWord)" class="max-h-full object-contain" @error="handleImgError">
                             </div>
 
                             <!-- Quiz Content (Right) -->
-                            <div class="space-y-3">
-                                <div class="text-center text-xl font-bold text-slate-800">
+                            <div class="space-y-3.5">
+                                <div class="text-center text-xl md:text-2xl font-bold text-slate-800">
                                     '{{ currentWord.meaning }}' 의 영단어는?
                                 </div>
 
                                 <!-- Realtime Chars -->
-                                <div class="flex justify-center gap-1.5 min-h-[38px] items-center overflow-x-auto py-0.5">
-                                    <span v-if="quizText.length === 0" class="text-xs font-semibold text-slate-400">정답을 입력하세요...</span>
+                                <div class="flex justify-center gap-1.5 min-h-[42px] items-center overflow-x-auto py-0.5">
+                                    <span v-if="quizText.length === 0" class="text-sm font-semibold text-slate-400">정답을 입력하세요...</span>
                                     <span v-else v-for="(char, idx) in quizText.split('')" :key="idx"
-                                          class="w-8 h-9 flex items-center justify-center rounded-lg font-mono font-black text-lg shadow-sm border-2"
+                                          class="w-9 h-10 flex items-center justify-center rounded-lg font-mono font-black text-xl shadow-sm border-2"
                                           :class="isQuizCharCorrect(char, idx) ? 'bg-green-100 text-green-700 border-green-500' : 'bg-rose-500 text-white border-rose-600'">
                                         {{ char }}
                                     </span>
                                 </div>
 
-                                <input ref="quizInput"
-                                       v-model="quizText"
-                                       @keyup.enter="submitQuiz"
-                                       type="text"
-                                       autocapitalize="off"
-                                       autocorrect="off"
-                                       spellcheck="false"
-                                       placeholder="정답 입력 후 엔터"
-                                       class="w-full h-11 px-3 bg-blue-50 border-2 border-purple-400 rounded-xl font-bold text-xl text-slate-900 focus:outline-none focus:border-purple-600">
+                                <div class="flex gap-2">
+                                    <input ref="quizInput"
+                                           v-model="quizText"
+                                           @keyup.enter="submitQuiz"
+                                           type="text"
+                                           autocapitalize="off"
+                                           autocorrect="off"
+                                           spellcheck="false"
+                                           placeholder="정답 입력"
+                                           class="flex-1 h-12 px-3.5 bg-blue-50 border-2 border-purple-400 rounded-xl font-bold text-xl text-slate-900 focus:outline-none focus:border-purple-600 shadow-inner">
+                                    <button @click="clearQuizInput" class="bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold px-3.5 rounded-xl text-sm transition flex-shrink-0 shadow-sm">
+                                        🔄 초기화
+                                    </button>
+                                </div>
 
-                                <button @click="submitQuiz" class="w-full bg-purple-600 hover:bg-purple-700 text-white font-bold py-2.5 rounded-xl shadow-md text-base">
+                                <button @click="submitQuiz" class="w-full bg-purple-600 hover:bg-purple-700 text-white font-bold py-3 rounded-xl shadow-md text-base transition">
                                     정답 제출하기
                                 </button>
                             </div>
@@ -354,7 +359,6 @@
     <script>
         const { createApp, ref, computed, watch, nextTick, onMounted } = Vue;
 
-        // IndexedDB Helper (이미지 대용량 저장 전용)
         const dbName = "VocabAppDB";
         const openDB = () => {
             return new Promise((resolve, reject) => {
@@ -384,7 +388,7 @@
                     tx.onerror = (e) => reject(e);
                 });
             } catch (e) {
-                console.warn('IndexedDB 저장 한계 또는 오류 발생:', e);
+                console.warn('IndexedDB 저장 오류:', e);
             }
         };
 
@@ -437,12 +441,13 @@
                 };
                 const playErrorSound = () => playSound(180, 'sawtooth', 0.2);
 
-                const speak = (text) => {
+                // 속도 조절 가능하게 수정한 TTS (기본값 0.7: 천천히 읽기)
+                const speak = (text, rate = 0.7) => {
                     if ('speechSynthesis' in window) {
                         window.speechSynthesis.cancel();
                         const utterance = new SpeechSynthesisUtterance(text);
                         utterance.lang = 'en-US';
-                        utterance.rate = 0.85;
+                        utterance.rate = rate;
                         window.speechSynthesis.speak(utterance);
                     }
                 };
@@ -468,10 +473,8 @@
                 const quizInput = ref(null);
                 const fileInput = ref(null);
 
-                // Modal State
                 const showConfirmModal = ref(false);
 
-                // Auto-Load on Startup
                 onMounted(async () => {
                     try {
                         const savedWords = localStorage.getItem('vocab_all_words');
@@ -488,21 +491,18 @@
                             savedDate.value = savedDateVal;
                         }
 
-                        // IndexedDB에서 이미지 복원
                         imageMap.value = await loadImagesFromIDB();
                     } catch (e) {
-                        console.error('데이터 복원 로드 오류:', e);
+                        console.error('데이터 로드 오류:', e);
                     }
                 });
 
-                // Auto-Save Learned Progress
                 watch(learnedWordIDs, (newVal) => {
                     try {
                         localStorage.setItem('vocab_learned_ids', JSON.stringify(newVal));
                     } catch (e) {}
                 }, { deep: true });
 
-                // Modal Functions
                 const openConfirmModal = () => {
                     showConfirmModal.value = true;
                 };
@@ -518,7 +518,6 @@
                     showConfirmModal.value = false;
                 };
 
-                // File Upload Handling (ZIP & JSON)
                 const handleFileUpload = async (e) => {
                     const file = e.target.files[0];
                     if (!file) return;
@@ -539,7 +538,6 @@
                                 return !name.includes('__MACOSX') && !fileName.startsWith('.') && !f.dir;
                             };
 
-                            // 1. JSON 파일 찾기
                             const jsonFiles = zip.file(/\.json$/i).filter(isRealFile);
                             if (jsonFiles.length === 0) {
                                 alert('❌ ZIP 파일 내부에 .json 단어장 파일이 없습니다.');
@@ -548,7 +546,7 @@
                             }
 
                             let jsonText = await jsonFiles[0].async('text');
-                            jsonText = jsonText.replace(/^\uFEFF/, ''); // BOM 제거
+                            jsonText = jsonText.replace(/^\uFEFF/, '');
 
                             let raw;
                             try {
@@ -559,7 +557,6 @@
                                 return;
                             }
 
-                            // 2. 이미지 파일 추출
                             const imageFiles = zip.file(/\.(png|jpe?g|webp|gif|svg)$/i).filter(isRealFile);
                             const extractedImages = {};
 
@@ -582,11 +579,9 @@
                                 extractedImages[fileNameWithoutExt] = dataUrl;
                             }
 
-                            // IndexedDB에 대용량 이미지 저장
                             await saveImagesToIDB(extractedImages);
                             imageMap.value = extractedImages;
 
-                            // 3. 단어 데이터 파싱 및 저장 (메모리 경량화 저장)
                             parseAndSaveWords(raw);
 
                         } else if (file.name.toLowerCase().endsWith('.json')) {
@@ -651,7 +646,7 @@
                             meaning: getVal(['meaning', 'korean', 'kor', 'trans', 'translation', 'def', 'definition', 'mean', 'ko']) || '뜻 없음',
                             example: getVal(['example', 'examplesentence', 'sentence', 'ex', 'sample']),
                             exampleMeaning: getVal(['examplemeaning', 'sentencemeaning', 'examplekorean', 'examplekor', 'exmeaning']),
-                            imageFileName: specifiedImg || null // 대용량 base64는 제외하고 파일명만 보관
+                            imageFileName: specifiedImg || null
                         };
                     });
 
@@ -662,19 +657,17 @@
                     const formattedDate = `${now.getFullYear()}.${String(now.getMonth()+1).padStart(2, '0')}.${String(now.getDate()).padStart(2, '0')} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
                     savedDate.value = formattedDate;
 
-                    // LocalStorage 안전 저장 (Base64 용량 제외로 용량 초과 방지)
                     try {
                         localStorage.setItem('vocab_all_words', JSON.stringify(parsed));
                         localStorage.setItem('vocab_learned_ids', JSON.stringify([]));
                         localStorage.setItem('vocab_saved_date', formattedDate);
                     } catch (e) {
-                        console.warn('로컬스토리지 저장 용량 한계 (메모리로 계속 작동합니다):', e);
+                        console.warn('로컬스토리지 저장 한계:', e);
                     }
 
                     alert(`✅ 총 ${parsed.length}개 단어가 저장되었습니다!`);
                 };
 
-                // Computed Logic
                 const availableWeeks = computed(() => {
                     const weeks = [...new Set(allWords.value.map(w => w.week))];
                     return weeks.sort((a, b) => a - b);
@@ -762,7 +755,6 @@
                     return 'bg-slate-100 text-slate-400';
                 };
 
-                // Learning Flow
                 const currentWordList = computed(() => getWords(currentWeek.value, selectedDay.value));
                 const currentWord = computed(() => currentWordList.value[currentIndex.value] || null);
                 const learnedInDayCount = computed(() => currentWordList.value.filter(w => isLearned(w)).length);
@@ -787,7 +779,7 @@
                     quizText.value = '';
                     isDayCompleted.value = false;
                     focusInput();
-                    if (currentWord.value) speak(currentWord.value.english);
+                    if (currentWord.value) speak(currentWord.value.english, 0.75);
                 };
 
                 const focusInput = () => {
@@ -798,6 +790,16 @@
                             quizInput.value.focus();
                         }
                     });
+                };
+
+                const clearPracticeInput = () => {
+                    practiceText.value = '';
+                    focusInput();
+                };
+
+                const clearQuizInput = () => {
+                    quizText.value = '';
+                    focusInput();
                 };
 
                 const isCharCorrect = (char, idx) => {
@@ -856,7 +858,7 @@
                         if (currentIndex.value + 1 < currentWordList.value.length) {
                             currentIndex.value++;
                             focusInput();
-                            speak(currentWord.value.english);
+                            speak(currentWord.value.english, 0.75);
                         } else {
                             isDayCompleted.value = true;
                         }
@@ -885,11 +887,9 @@
                     }
                 };
 
-                // IndexedDB 및 파일명 동적 매칭
                 const getWordImage = (word) => {
                     if (!word) return '';
 
-                    // 1. JSON 파일명 지정 매칭
                     if (word.imageFileName) {
                         const lowerSpec = word.imageFileName.toLowerCase().trim();
                         const specWithoutPath = lowerSpec.split('/').pop();
@@ -901,13 +901,11 @@
                         if (word.imageFileName.startsWith('http')) return word.imageFileName;
                     }
 
-                    // 2. 영단어 매칭
                     if (imageMap.value) {
                         const engLower = word.english.toLowerCase().trim();
                         if (imageMap.value[engLower]) return imageMap.value[engLower];
                     }
 
-                    // 3. 웹 대체 이미지
                     return `https://loremflickr.com/500/400/${encodeURIComponent(word.english.toLowerCase())},illustration,cartoon/all`;
                 };
 
@@ -924,7 +922,7 @@
                     isDayUnlocked, isDayDone, overallProgressRate, getWeekProgressRate, todayLesson, getDayBtnClass,
                     currentWordList, currentWord, learnedInDayCount, startLesson, changeDay, resetDayProgress,
                     isCharCorrect, isQuizCharCorrect, onPracticeInput, submitPractice, submitQuiz, advanceToNextDay, resetProgress,
-                    speak, getWordImage, handleImgError
+                    clearPracticeInput, clearQuizInput, speak, getWordImage, handleImgError
                 };
             }
         }).mount('#app');
