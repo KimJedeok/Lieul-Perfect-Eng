@@ -37,20 +37,26 @@
                     <h1 class="text-2xl font-bold text-slate-900">매일매일 영단어 🌸</h1>
                     <p class="text-sm font-semibold text-slate-500">미완료 진도는 차례대로 해금됩니다.</p>
                 </div>
-                <label class="cursor-pointer bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200 px-4 py-2.5 rounded-xl text-sm font-bold shadow-sm transition">
-                    📂 JSON 불러오기
-                    <input type="file" accept=".json" @change="handleFileUpload" class="hidden">
-                </label>
+                <!-- JSON Status & Action Button -->
+                <div class="flex items-center gap-2">
+                    <span v-if="allWords.length > 0" class="hidden sm:inline-flex items-center text-xs font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-3 py-2 rounded-xl">
+                        🟢 {{ allWords.length }}개 저장됨
+                    </span>
+                    <label class="cursor-pointer bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200 px-4 py-2.5 rounded-xl text-sm font-bold shadow-sm transition flex items-center gap-1">
+                        <span>{{ allWords.length > 0 ? '🔄 단어장 변경' : '📂 JSON 불러오기' }}</span>
+                        <input type="file" accept=".json" @change="handleFileUpload" class="hidden">
+                    </label>
+                </div>
             </div>
 
-            <!-- Empty State -->
+            <!-- Empty State (No JSON Loaded) -->
             <div v-if="allWords.length === 0" class="bg-white p-10 rounded-2xl shadow-sm text-center space-y-4">
                 <div class="text-6xl text-purple-500">📁</div>
-                <h2 class="text-xl font-bold">등록된 단어장이 없습니다</h2>
-                <p class="text-slate-500 font-medium">상단의 [JSON 불러오기] 버튼을 눌러<br>아이패드 파일 앱의 JSON 파일 선택해 주세요!</p>
+                <h2 class="text-xl font-bold">저장된 단어장이 없습니다</h2>
+                <p class="text-slate-500 font-medium">상단의 <b>[JSON 불러오기]</b> 버튼을 누르고 단어장 파일을 고르면<br>내부에 <b>자동 영구 저장</b>되어 다음부터는 바로 공부할 수 있습니다!</p>
             </div>
 
-            <!-- Dashboard -->
+            <!-- Dashboard (JSON Loaded) -->
             <div v-else class="space-y-6">
                 <!-- Overall Progress -->
                 <div class="bg-white p-6 rounded-2xl shadow-sm space-y-4">
@@ -130,10 +136,9 @@
                     🎀 {{ currentWeek }}주차 ({{ selectedDay }})
                 </div>
 
-                <label class="cursor-pointer bg-purple-50 text-purple-700 px-3 py-2 rounded-xl text-xs font-bold">
-                    JSON
-                    <input type="file" accept=".json" @change="handleFileUpload" class="hidden">
-                </label>
+                <div class="text-xs font-bold text-slate-400">
+                    학습중
+                </div>
             </div>
 
             <!-- Day Selector Tabs -->
@@ -229,7 +234,7 @@
                                 </span>
                             </div>
 
-                            <!-- Input Field (100% Reliable for Bluetooth Keyboard) -->
+                            <!-- Input Field -->
                             <input ref="practiceInput"
                                    v-model="practiceText"
                                    @input="onPracticeInput"
@@ -289,7 +294,6 @@
 
         createApp({
             setup() {
-                // Audio Context Synthesizer (No external sound files required)
                 const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
                 
                 const playSound = (freq, type, duration) => {
@@ -311,9 +315,7 @@
                     playSound(523.25, 'sine', 0.1);
                     setTimeout(() => playSound(659.25, 'sine', 0.15), 100);
                 };
-                const playErrorSound = () => {
-                    playSound(180, 'sawtooth', 0.2);
-                };
+                const playErrorSound = () => playSound(180, 'sawtooth', 0.2);
 
                 const speak = (text) => {
                     if ('speechSynthesis' in window) {
@@ -334,7 +336,7 @@
                 const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
                 const currentIndex = ref(0);
-                const currentMode = ref('practice'); // 'practice' or 'quiz'
+                const currentMode = ref('practice');
                 const practiceText = ref('');
                 const practiceCount = ref(0);
                 const quizText = ref('');
@@ -343,19 +345,28 @@
                 const practiceInput = ref(null);
                 const quizInput = ref(null);
 
-                // LocalStorage Persistence
+                // Auto-Load from LocalStorage on Startup
                 onMounted(() => {
-                    const savedWords = localStorage.getItem('vocab_all_words');
-                    const savedLearned = localStorage.getItem('vocab_learned_ids');
-                    if (savedWords) allWords.value = JSON.parse(savedWords);
-                    if (savedLearned) learnedWordIDs.value = JSON.parse(savedLearned);
+                    try {
+                        const savedWords = localStorage.getItem('vocab_all_words');
+                        const savedLearned = localStorage.getItem('vocab_learned_ids');
+                        if (savedWords) {
+                            allWords.value = JSON.parse(savedWords);
+                        }
+                        if (savedLearned) {
+                            learnedWordIDs.value = JSON.parse(savedLearned);
+                        }
+                    } catch (e) {
+                        console.error('로컬 데이터 불러오기 실패:', e);
+                    }
                 });
 
+                // Auto-Save Learned Progress
                 watch(learnedWordIDs, (newVal) => {
                     localStorage.setItem('vocab_learned_ids', JSON.stringify(newVal));
                 }, { deep: true });
 
-                // File Reader & Dynamic Parser
+                // File Upload & Persistent Storage
                 const handleFileUpload = (e) => {
                     const file = e.target.files[0];
                     if (!file) return;
@@ -393,11 +404,15 @@
                             });
 
                             allWords.value = parsed;
-                            localStorage.setItem('vocab_all_words', JSON.stringify(parsed));
                             learnedWordIDs.value = [];
-                            alert(`✅ 성공적으로 ${parsed.count || parsed.length}개 단어를 불러왔습니다!`);
+                            
+                            // Save to LocalStorage permanently
+                            localStorage.setItem('vocab_all_words', JSON.stringify(parsed));
+                            localStorage.setItem('vocab_learned_ids', JSON.stringify([]));
+
+                            alert(`✅ 총 ${parsed.length}개 단어가 저장되었습니다!\n이제 앱을 재실행해도 자동으로 불러옵니다.`);
                         } catch (err) {
-                            alert('❌ JSON 올바른 형태가 아닙니다.');
+                            alert('❌ 올바른 형식의 JSON 파일이 아닙니다.');
                         }
                     };
                     reader.readAsText(file);
