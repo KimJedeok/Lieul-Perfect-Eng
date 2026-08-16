@@ -518,23 +518,46 @@
                     if (!file) return;
 
                     try {
+                        if (typeof JSZip === 'undefined') {
+                            alert('❌ JSZip 라이브러리가 준비되지 않았습니다. 와이파이 연결 상태를 확인하고 새로고침해 주세요.');
+                            e.target.value = '';
+                            return;
+                        }
+
                         if (file.name.toLowerCase().endsWith('.zip')) {
                             // ZIP 파일 처리
                             const zip = await JSZip.loadAsync(file);
                             
+                            // 숨김 파일 및 맥/아이패드 시스템 파일(__MACOSX, ._ 파일) 필터링
+                            const isRealFile = (f) => {
+                                const name = f.name;
+                                const fileName = name.split('/').pop();
+                                return !name.includes('__MACOSX') && !fileName.startsWith('.') && !f.dir;
+                            };
+
                             // 1. JSON 파일 찾기
-                            const jsonFiles = zip.file(/\.json$/i);
+                            const jsonFiles = zip.file(/\.json$/i).filter(isRealFile);
                             if (jsonFiles.length === 0) {
                                 alert('❌ ZIP 파일 내부에 .json 단어장 파일이 없습니다.');
                                 e.target.value = '';
                                 return;
                             }
 
-                            const jsonText = await jsonFiles[0].async('text');
-                            const raw = JSON.parse(jsonText);
+                            let jsonText = await jsonFiles[0].async('text');
+                            // UTF-8 BOM 제거
+                            jsonText = jsonText.replace(/^\uFEFF/, '');
+
+                            let raw;
+                            try {
+                                raw = JSON.parse(jsonText);
+                            } catch (jsonErr) {
+                                alert(`❌ JSON 파일 읽기 실패 (${jsonFiles[0].name})\nJSON 코드 문법에 오류가 있습니다.\n\n세부내용: ${jsonErr.message}`);
+                                e.target.value = '';
+                                return;
+                            }
 
                             // 2. 이미지 파일 추출
-                            const imageFiles = zip.file(/\.(png|jpe?g|webp|gif|svg)$/i);
+                            const imageFiles = zip.file(/\.(png|jpe?g|webp|gif|svg)$/i).filter(isRealFile);
                             const extractedImages = {};
 
                             for (const imgFile of imageFiles) {
@@ -568,25 +591,39 @@
                             const reader = new FileReader();
                             reader.onload = async (event) => {
                                 try {
-                                    const raw = JSON.parse(event.target.result);
+                                    let text = event.target.result.replace(/^\uFEFF/, '');
+                                    const raw = JSON.parse(text);
                                     await saveImagesToIDB({});
                                     imageMap.value = {};
                                     parseAndSaveWords(raw, {});
                                 } catch (err) {
-                                    alert('❌ 올바른 형식의 JSON 파일이 아닙니다.');
+                                    alert(`❌ JSON 문법 오류: ${err.message}`);
                                 }
                             };
                             reader.readAsText(file);
                         }
                     } catch (err) {
                         console.error(err);
-                        alert('❌ 파일을 처리하는 중 오류가 발생했습니다.');
+                        alert(`❌ 파일을 처리하는 중 오류가 발생했습니다.\n\n오류 상세: ${err.message || err}`);
                     }
                     e.target.value = ''; // Input Reset
                 };
 
                 const parseAndSaveWords = (raw, imagesDict = {}) => {
-                    const parsed = raw.map((item, idx) => {
+                    // 데이터 구조 파싱 (배열 형태 및 객체 형태 호환)
+                    let list = [];
+                    if (Array.isArray(raw)) {
+                        list = raw;
+                    } else if (raw && typeof raw === 'object') {
+                        list = raw.words || raw.data || raw.items || raw.list || [];
+                    }
+
+                    if (!Array.isArray(list) || list.length === 0) {
+                        alert('❌ 단어장에 유효한 단어 데이터가 없거나 형식이 올바르지 않습니다.');
+                        return;
+                    }
+
+                    const parsed = list.map((item, idx) => {
                         const norm = {};
                         Object.keys(item).forEach(k => {
                             const cleanKey = k.toLowerCase().replace(/_/g, '').replace(/ /g, '');
