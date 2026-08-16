@@ -3,11 +3,11 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>매일매일 영단어</title>
+    <title>리을의 영어정복</title>
     <!-- iOS PWA 홈 화면 추가 설정 -->
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <meta name="apple-mobile-web-app-title" content="영단어장">
+    <meta name="apple-mobile-web-app-title" content="리을의 영어정복">
     <link rel="apple-touch-icon" href="https://cdn-icons-png.flaticon.com/512/3898/3898082.png">
 
     <!-- Tailwind CSS CDN -->
@@ -32,20 +32,24 @@
         <!-- ==================== [ HOME SCREEN ] ==================== -->
         <div v-if="activeScreen === 'home'" class="space-y-6">
             <!-- Header -->
-            <div class="flex justify-between items-center bg-white p-5 rounded-2xl shadow-sm">
+            <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center bg-white p-5 rounded-2xl shadow-sm gap-3">
                 <div>
-                    <h1 class="text-2xl font-bold text-slate-900">매일매일 영단어 🌸</h1>
+                    <h1 class="text-2xl font-bold text-slate-900">리을의 영어정복 🌸</h1>
                     <p class="text-sm font-semibold text-slate-500">미완료 진도는 차례대로 해금됩니다.</p>
                 </div>
                 <!-- JSON Status & Action Button -->
-                <div class="flex items-center gap-2">
-                    <span v-if="allWords.length > 0" class="hidden sm:inline-flex items-center text-xs font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-3 py-2 rounded-xl">
-                        🟢 {{ allWords.length }}개 저장됨
-                    </span>
-                    <label class="cursor-pointer bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200 px-4 py-2.5 rounded-xl text-sm font-bold shadow-sm transition flex items-center gap-1">
+                <div class="flex flex-wrap items-center gap-2.5">
+                    <!-- Saved Info Badge -->
+                    <div v-if="allWords.length > 0" class="flex flex-col items-start sm:items-end bg-emerald-50 border border-emerald-200 px-3 py-1.5 rounded-xl text-xs">
+                        <span class="font-bold text-emerald-700">🟢 저장 단어수: {{ allWords.length }}개</span>
+                        <span v-if="savedDate" class="text-[11px] text-slate-500 font-medium">저장일자: {{ savedDate }}</span>
+                    </div>
+
+                    <!-- Open File Modal Button -->
+                    <button @click="openConfirmModal" class="bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200 px-4 py-2.5 rounded-xl text-sm font-bold shadow-sm transition flex items-center gap-1">
                         <span>{{ allWords.length > 0 ? '🔄 단어장 변경' : '📂 JSON 불러오기' }}</span>
-                        <input type="file" accept=".json" @change="handleFileUpload" class="hidden">
-                    </label>
+                    </button>
+                    <input ref="fileInput" type="file" accept=".json" @change="handleFileUpload" class="hidden">
                 </div>
             </div>
 
@@ -286,6 +290,27 @@
                 </div>
             </div>
         </div>
+
+        <!-- ==================== [ CONFIRMATION MODAL ] ==================== -->
+        <div v-if="showConfirmModal" class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+            <div class="bg-white rounded-2xl p-6 max-w-sm w-full shadow-xl space-y-4 text-center">
+                <div class="text-4xl">📂</div>
+                <h3 class="text-lg font-bold text-slate-800">JSON 단어장 불러오기</h3>
+                <p class="text-sm text-slate-600 leading-relaxed font-medium">
+                    새로운 단어장 파일(.json)을 불러오시겠습니까?<br>
+                    <span class="text-xs text-rose-500 font-semibold">(기존 단어장 및 학습 진도가 새로 저장됩니다)</span>
+                </p>
+                <div class="flex gap-2 pt-2">
+                    <button @click="cancelLoadFile" class="flex-1 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-sm transition">
+                        취소
+                    </button>
+                    <button @click="confirmLoadFile" class="flex-1 py-2.5 bg-purple-600 hover:bg-purple-700 text-white font-bold rounded-xl text-sm shadow-md transition">
+                        확인
+                    </button>
+                </div>
+            </div>
+        </div>
+
     </div>
 
     <!-- ==================== [ VUE LOGIC & WEB AUDIO ] ==================== -->
@@ -331,6 +356,7 @@
                 const activeScreen = ref('home');
                 const allWords = ref([]);
                 const learnedWordIDs = ref([]);
+                const savedDate = ref('');
                 const currentWeek = ref(1);
                 const selectedDay = ref('Mon');
                 const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
@@ -344,17 +370,26 @@
 
                 const practiceInput = ref(null);
                 const quizInput = ref(null);
+                const fileInput = ref(null);
+
+                // Modal State
+                const showConfirmModal = ref(false);
 
                 // Auto-Load from LocalStorage on Startup
                 onMounted(() => {
                     try {
                         const savedWords = localStorage.getItem('vocab_all_words');
                         const savedLearned = localStorage.getItem('vocab_learned_ids');
+                        const savedDateVal = localStorage.getItem('vocab_saved_date');
+
                         if (savedWords) {
                             allWords.value = JSON.parse(savedWords);
                         }
                         if (savedLearned) {
                             learnedWordIDs.value = JSON.parse(savedLearned);
+                        }
+                        if (savedDateVal) {
+                            savedDate.value = savedDateVal;
                         }
                     } catch (e) {
                         console.error('로컬 데이터 불러오기 실패:', e);
@@ -365,6 +400,22 @@
                 watch(learnedWordIDs, (newVal) => {
                     localStorage.setItem('vocab_learned_ids', JSON.stringify(newVal));
                 }, { deep: true });
+
+                // Modal Functions
+                const openConfirmModal = () => {
+                    showConfirmModal.value = true;
+                };
+
+                const confirmLoadFile = () => {
+                    showConfirmModal.value = false;
+                    if (fileInput.value) {
+                        fileInput.value.click();
+                    }
+                };
+
+                const cancelLoadFile = () => {
+                    showConfirmModal.value = false;
+                };
 
                 // File Upload & Persistent Storage
                 const handleFileUpload = (e) => {
@@ -406,14 +457,21 @@
                             allWords.value = parsed;
                             learnedWordIDs.value = [];
                             
+                            // Date Formatting
+                            const now = new Date();
+                            const formattedDate = `${now.getFullYear()}.${String(now.getMonth()+1).padStart(2, '0')}.${String(now.getDate()).padStart(2, '0')} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+                            savedDate.value = formattedDate;
+
                             // Save to LocalStorage permanently
                             localStorage.setItem('vocab_all_words', JSON.stringify(parsed));
                             localStorage.setItem('vocab_learned_ids', JSON.stringify([]));
+                            localStorage.setItem('vocab_saved_date', formattedDate);
 
-                            alert(`✅ 총 ${parsed.length}개 단어가 저장되었습니다!\n이제 앱을 재실행해도 자동으로 불러옵니다.`);
+                            alert(`✅ 총 ${parsed.length}개 단어가 저장되었습니다!`);
                         } catch (err) {
                             alert('❌ 올바른 형식의 JSON 파일이 아닙니다.');
                         }
+                        e.target.value = ''; // Input Reset
                     };
                     reader.readAsText(file);
                 };
@@ -632,10 +690,11 @@
                 };
 
                 return {
-                    activeScreen, allWords, learnedWordIDs, currentWeek, selectedDay, days,
+                    activeScreen, allWords, learnedWordIDs, savedDate, currentWeek, selectedDay, days,
                     currentIndex, currentMode, practiceText, practiceCount, quizText, isDayCompleted,
-                    practiceInput, quizInput,
-                    handleFileUpload, availableWeeks, getWords, isLearned, isWeekUnlocked, isWeekCompleted,
+                    practiceInput, quizInput, fileInput, showConfirmModal,
+                    openConfirmModal, confirmLoadFile, cancelLoadFile, handleFileUpload,
+                    availableWeeks, getWords, isLearned, isWeekUnlocked, isWeekCompleted,
                     isDayUnlocked, isDayDone, overallProgressRate, getWeekProgressRate, todayLesson, getDayBtnClass,
                     currentWordList, currentWord, learnedInDayCount, startLesson, changeDay, resetDayProgress,
                     isCharCorrect, isQuizCharCorrect, onPracticeInput, submitQuiz, advanceToNextDay, resetProgress,
