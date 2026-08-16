@@ -1,0 +1,633 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>매일매일 영단어</title>
+    <!-- iOS PWA 홈 화면 추가 설정 -->
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="영단어장">
+    <link rel="apple-touch-icon" href="https://cdn-icons-png.flaticon.com/512/3898/3898082.png">
+
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Vue 3 CDN -->
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+        input {
+            user-select: text;
+            -webkit-user-select: text;
+        }
+    </style>
+</head>
+<body class="bg-slate-100 text-slate-800 antialiased min-h-screen">
+    <div id="app" class="max-w-4xl mx-auto min-h-screen flex flex-col p-4">
+        
+        <!-- ==================== [ HOME SCREEN ] ==================== -->
+        <div v-if="activeScreen === 'home'" class="space-y-6">
+            <!-- Header -->
+            <div class="flex justify-between items-center bg-white p-5 rounded-2xl shadow-sm">
+                <div>
+                    <h1 class="text-2xl font-bold text-slate-900">매일매일 영단어 🌸</h1>
+                    <p class="text-sm font-semibold text-slate-500">미완료 진도는 차례대로 해금됩니다.</p>
+                </div>
+                <label class="cursor-pointer bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200 px-4 py-2.5 rounded-xl text-sm font-bold shadow-sm transition">
+                    📂 JSON 불러오기
+                    <input type="file" accept=".json" @change="handleFileUpload" class="hidden">
+                </label>
+            </div>
+
+            <!-- Empty State -->
+            <div v-if="allWords.length === 0" class="bg-white p-10 rounded-2xl shadow-sm text-center space-y-4">
+                <div class="text-6xl text-purple-500">📁</div>
+                <h2 class="text-xl font-bold">등록된 단어장이 없습니다</h2>
+                <p class="text-slate-500 font-medium">상단의 [JSON 불러오기] 버튼을 눌러<br>아이패드 파일 앱의 JSON 파일 선택해 주세요!</p>
+            </div>
+
+            <!-- Dashboard -->
+            <div v-else class="space-y-6">
+                <!-- Overall Progress -->
+                <div class="bg-white p-6 rounded-2xl shadow-sm space-y-4">
+                    <div class="flex justify-between items-end">
+                        <div>
+                            <h2 class="text-lg font-bold text-purple-900">📊 나의 학습 성취율</h2>
+                            <p class="text-sm font-semibold text-slate-500">총 {{ allWords.length }}개 단어 중 {{ learnedWordIDs.length }}개 완주</p>
+                        </div>
+                        <span class="text-3xl font-black text-rose-500">{{ Math.round(overallProgressRate * 100) }}%</span>
+                    </div>
+                    <div class="w-full bg-slate-100 h-4 rounded-full overflow-hidden">
+                        <div class="bg-rose-500 h-full transition-all duration-300" :style="{ width: (overallProgressRate * 100) + '%' }"></div>
+                    </div>
+                    <div class="bg-amber-50 border border-amber-200 text-amber-800 p-3 rounded-xl text-xs font-semibold flex items-center gap-2">
+                        <span>🔒</span> 이전 요일/주차를 완료해야 다음 단어가 순차적으로 해금됩니다.
+                    </div>
+                </div>
+
+                <!-- Today Recommended Lesson -->
+                <div class="bg-rose-50 border-2 border-rose-200 p-6 rounded-2xl shadow-sm space-y-3">
+                    <div class="text-sm font-bold text-rose-600">🚀 오늘 학습할 차례!</div>
+                    <div class="flex justify-between items-center">
+                        <div>
+                            <h3 class="text-xl font-bold text-slate-800">{{ todayLesson.week }}주차 - {{ todayLesson.day === 'Sat' ? '토요일(복습)' : todayLesson.day }}</h3>
+                            <p class="text-sm font-semibold text-slate-500">학습 단어: {{ getWords(todayLesson.week, todayLesson.day).length }}개</p>
+                        </div>
+                        <button @click="startLesson(todayLesson.week, todayLesson.day)" class="bg-rose-500 hover:bg-rose-600 text-white font-bold px-5 py-3 rounded-xl shadow-md transition">
+                            학습 시작 →
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Week List -->
+                <div class="space-y-4">
+                    <div class="flex justify-between items-center">
+                        <h3 class="text-lg font-bold text-slate-800">🎯 주차별 바로가기 & 진도</h3>
+                        <button @click="resetProgress" class="text-xs font-bold text-rose-600 bg-rose-50 hover:bg-rose-100 px-3 py-1.5 rounded-lg border border-rose-200">
+                            🔄 진도 초기화
+                        </button>
+                    </div>
+
+                    <div v-for="week in availableWeeks" :key="week" class="bg-white p-5 rounded-2xl shadow-sm space-y-3 border border-slate-100">
+                        <div class="flex justify-between items-center">
+                            <div class="flex items-center gap-2">
+                                <span class="font-bold text-lg" :class="isWeekUnlocked(week) ? 'text-slate-800' : 'text-slate-400'">{{ week }}주차</span>
+                                <span v-if="!isWeekUnlocked(week)" class="text-xs">🔒</span>
+                                <span v-else-if="isWeekCompleted(week)" class="bg-green-100 text-green-700 text-xs font-bold px-2 py-0.5 rounded-md">완주 완료! 🎉</span>
+                            </div>
+                            <span class="text-sm font-bold text-purple-600">{{ Math.round(getWeekProgressRate(week) * 100) }}%</span>
+                        </div>
+
+                        <div class="grid grid-cols-6 gap-2">
+                            <button v-for="day in days" :key="day" 
+                                    @click="startLesson(week, day)"
+                                    :disabled="!isDayUnlocked(week, day)"
+                                    class="py-2.5 rounded-xl font-bold text-xs flex items-center justify-center gap-1 transition"
+                                    :class="getDayBtnClass(week, day)">
+                                <span>{{ day === 'Sat' ? '토' : day }}</span>
+                                <span v-if="isDayDone(week, day)">✓</span>
+                                <span v-else-if="!isDayUnlocked(week, day)">🔒</span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ==================== [ LEARNING SCREEN ] ==================== -->
+        <div v-if="activeScreen === 'learning'" class="space-y-4 flex-1 flex flex-col">
+            <!-- Header -->
+            <div class="flex justify-between items-center bg-white p-4 rounded-2xl shadow-sm">
+                <button @click="activeScreen = 'home'" class="bg-slate-100 hover:bg-slate-200 font-bold text-rose-600 px-4 py-2 rounded-xl text-sm shadow-sm">
+                    🏠 홈으로
+                </button>
+
+                <div class="font-bold text-rose-500 bg-rose-50 px-4 py-2 rounded-full border border-rose-200 text-sm">
+                    🎀 {{ currentWeek }}주차 ({{ selectedDay }})
+                </div>
+
+                <label class="cursor-pointer bg-purple-50 text-purple-700 px-3 py-2 rounded-xl text-xs font-bold">
+                    JSON
+                    <input type="file" accept=".json" @change="handleFileUpload" class="hidden">
+                </label>
+            </div>
+
+            <!-- Day Selector Tabs -->
+            <div class="grid grid-cols-6 gap-1.5">
+                <button v-for="day in days" :key="day"
+                        @click="changeDay(day)"
+                        :disabled="!isDayUnlocked(currentWeek, day)"
+                        class="py-2 rounded-xl text-xs font-bold transition"
+                        :class="selectedDay === day ? 'bg-rose-500 text-white shadow-sm' : (isDayUnlocked(currentWeek, day) ? 'bg-white text-slate-700' : 'bg-slate-200 text-slate-400')">
+                    {{ day === 'Sat' ? '토' : day }}
+                </button>
+            </div>
+
+            <!-- Daily Review Screen -->
+            <div v-if="isDayCompleted" class="bg-white p-8 rounded-2xl shadow-sm text-center space-y-6 my-auto">
+                <h2 class="text-3xl font-black text-rose-500">🎉 오늘 공부 완주!</h2>
+                <p class="text-slate-500 font-semibold">배운 단어를 복습해보세요. 다음 진도가 해금되었습니다.</p>
+                <div class="max-h-60 overflow-y-auto space-y-2 text-left bg-slate-50 p-4 rounded-xl border border-slate-200">
+                    <div v-for="w in currentWordList" :key="w.id" class="flex justify-between items-center p-2 border-b last:border-0">
+                        <div>
+                            <span class="font-bold text-slate-800">{{ w.english }}</span>
+                            <span class="text-sm text-slate-500 ml-2">{{ w.meaning }}</span>
+                        </div>
+                        <button @click="speak(w.english)" class="text-purple-600 p-1">🔊</button>
+                    </div>
+                </div>
+                <div class="flex gap-4">
+                    <button @click="resetDayProgress" class="flex-1 bg-slate-100 hover:bg-slate-200 font-bold py-3 rounded-xl">다시 학습하기</button>
+                    <button @click="advanceToNextDay" class="flex-1 bg-rose-500 hover:bg-rose-600 text-white font-bold py-3 rounded-xl shadow-md">다음 학습으로 →</button>
+                </div>
+            </div>
+
+            <!-- Learning Active View -->
+            <div v-else-if="currentWord" class="space-y-4 flex-1 flex flex-col">
+                <!-- Progress Header -->
+                <div class="bg-white p-4 rounded-2xl shadow-sm space-y-2">
+                    <div class="flex justify-between text-xs font-bold">
+                        <span class="text-slate-800">🌸 오늘의 단어 공부</span>
+                        <span class="text-purple-600">{{ learnedInDayCount }} / {{ currentWordList.length }} 완료</span>
+                    </div>
+                    <div class="flex gap-2 overflow-x-auto py-1">
+                        <div v-for="w in currentWordList" :key="w.id" 
+                             class="flex items-center gap-1 text-xs font-bold px-3 py-1.5 rounded-lg border flex-shrink-0"
+                             :class="isLearned(w) ? 'bg-green-50 border-green-200 text-green-700 line-through' : 'bg-white border-slate-200 text-slate-700'">
+                            <span>{{ isLearned(w) ? '✓' : '✨' }}</span>
+                            <span>{{ w.english }}</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Word Card -->
+                <div class="bg-white p-6 rounded-2xl shadow-sm space-y-6 flex-1 flex flex-col justify-between border border-slate-100">
+                    <!-- Image Display -->
+                    <div class="w-full h-44 bg-slate-50 rounded-xl overflow-hidden flex items-center justify-center border border-slate-100">
+                        <img :src="getWordImage(currentWord)" class="max-h-full object-contain" @error="handleImgError">
+                    </div>
+
+                    <!-- STAGE 1: Listening & Typing 3 Times -->
+                    <div v-if="currentMode === 'practice'" class="space-y-5">
+                        <div class="text-center bg-rose-50 border border-rose-200 py-1.5 px-4 rounded-full text-xs font-bold text-rose-600 w-fit mx-auto">
+                            1단계: 듣고 따라 입력하기 🎀
+                        </div>
+
+                        <div class="bg-slate-50 p-4 rounded-xl text-center space-y-1">
+                            <div class="flex items-center justify-center gap-3">
+                                <span class="text-4xl font-black text-slate-900">{{ currentWord.english }}</span>
+                                <button @click="speak(currentWord.english)" class="bg-purple-100 p-2.5 rounded-full text-purple-700 text-lg hover:bg-purple-200">🔊</button>
+                            </div>
+                            <div class="text-xl font-bold text-rose-500">{{ currentWord.meaning }}</div>
+                        </div>
+
+                        <!-- Example Sentence -->
+                        <div v-if="currentWord.example" class="bg-white border border-slate-200 p-3.5 rounded-xl text-left space-y-1">
+                            <div class="text-xs font-bold text-slate-400">💬 오늘의 예문</div>
+                            <div class="text-sm font-bold text-slate-800">{{ currentWord.example }}</div>
+                            <div class="text-xs font-semibold text-slate-500">{{ currentWord.exampleMeaning }}</div>
+                        </div>
+
+                        <!-- Realtime Feedback Chips & Input -->
+                        <div class="space-y-3 bg-purple-50/50 p-4 rounded-xl border border-purple-100">
+                            <div class="flex justify-between items-center text-xs font-bold">
+                                <span>⌨️ 실시간 정/오답 확인 ({{ practiceCount }}/3회)</span>
+                                <button v-if="practiceText" @click="practiceText = ''" class="text-rose-500">초기화</button>
+                            </div>
+
+                            <!-- Realtime Chars -->
+                            <div class="flex gap-1.5 min-h-[44px] items-center overflow-x-auto py-1">
+                                <span v-if="practiceText.length === 0" class="text-xs font-semibold text-slate-400">키보드로 영단어를 입력하세요...</span>
+                                <span v-else v-for="(char, idx) in practiceText.split('')" :key="idx"
+                                      class="w-9 h-11 flex items-center justify-center rounded-lg font-mono font-black text-xl shadow-sm border-2"
+                                      :class="isCharCorrect(char, idx) ? 'bg-green-100 text-green-700 border-green-500' : 'bg-rose-500 text-white border-rose-600'">
+                                    {{ char }}
+                                </span>
+                            </div>
+
+                            <!-- Input Field (100% Reliable for Bluetooth Keyboard) -->
+                            <input ref="practiceInput"
+                                   v-model="practiceText"
+                                   @input="onPracticeInput"
+                                   type="text"
+                                   placeholder="여기 터치 후 알파벳 타이핑"
+                                   class="w-full h-14 px-4 bg-amber-50 border-4 border-purple-400 rounded-xl font-bold text-2xl text-slate-900 focus:outline-none focus:border-purple-600">
+
+                            <!-- Progress Dots -->
+                            <div class="flex justify-center gap-3 pt-1">
+                                <div v-for="i in 3" :key="i"
+                                     class="w-4 h-4 rounded-full transition-all"
+                                     :class="i <= practiceCount ? 'bg-green-500' : 'bg-slate-200'">
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- STAGE 2: Spelling Quiz -->
+                    <div v-else class="space-y-5">
+                        <div class="text-center bg-purple-100 text-purple-700 py-1.5 px-4 rounded-full text-xs font-bold w-fit mx-auto">
+                            2단계: 스펠링 테스트 🎯
+                        </div>
+
+                        <div class="text-center text-2xl font-bold text-slate-800">
+                            '{{ currentWord.meaning }}' 의 영단어는?
+                        </div>
+
+                        <!-- Realtime Chars -->
+                        <div class="flex justify-center gap-1.5 min-h-[44px] items-center overflow-x-auto py-1">
+                            <span v-if="quizText.length === 0" class="text-xs font-semibold text-slate-400">정답을 입력하세요...</span>
+                            <span v-else v-for="(char, idx) in quizText.split('')" :key="idx"
+                                  class="w-9 h-11 flex items-center justify-center rounded-lg font-mono font-black text-xl shadow-sm border-2"
+                                  :class="isQuizCharCorrect(char, idx) ? 'bg-green-100 text-green-700 border-green-500' : 'bg-rose-500 text-white border-rose-600'">
+                                {{ char }}
+                            </span>
+                        </div>
+
+                        <input ref="quizInput"
+                               v-model="quizText"
+                               @keyup.enter="submitQuiz"
+                               type="text"
+                               placeholder="정답 입력 후 엔터"
+                               class="w-full h-14 px-4 bg-blue-50 border-4 border-purple-400 rounded-xl font-bold text-2xl text-slate-900 focus:outline-none focus:border-purple-600">
+
+                        <button @click="submitQuiz" class="w-full bg-purple-600 hover:bg-purple-700 text-white font-bold py-3.5 rounded-xl shadow-md text-lg">
+                            정답 제출하기
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ==================== [ VUE LOGIC & WEB AUDIO ] ==================== -->
+    <script>
+        const { createApp, ref, computed, watch, nextTick, onMounted } = Vue;
+
+        createApp({
+            setup() {
+                // Audio Context Synthesizer (No external sound files required)
+                const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                
+                const playSound = (freq, type, duration) => {
+                    try {
+                        const osc = audioCtx.createOscillator();
+                        const gain = audioCtx.createGain();
+                        osc.type = type;
+                        osc.frequency.value = freq;
+                        osc.connect(gain);
+                        gain.connect(audioCtx.destination);
+                        osc.start();
+                        gain.gain.exponentialRampToValueAtTime(0.00001, audioCtx.currentTime + duration);
+                        osc.stop(audioCtx.currentTime + duration);
+                    } catch (e) {}
+                };
+
+                const playTypingSound = () => playSound(800, 'sine', 0.05);
+                const playCorrectSound = () => {
+                    playSound(523.25, 'sine', 0.1);
+                    setTimeout(() => playSound(659.25, 'sine', 0.15), 100);
+                };
+                const playErrorSound = () => {
+                    playSound(180, 'sawtooth', 0.2);
+                };
+
+                const speak = (text) => {
+                    if ('speechSynthesis' in window) {
+                        window.speechSynthesis.cancel();
+                        const utterance = new SpeechSynthesisUtterance(text);
+                        utterance.lang = 'en-US';
+                        utterance.rate = 0.85;
+                        window.speechSynthesis.speak(utterance);
+                    }
+                };
+
+                // State
+                const activeScreen = ref('home');
+                const allWords = ref([]);
+                const learnedWordIDs = ref([]);
+                const currentWeek = ref(1);
+                const selectedDay = ref('Mon');
+                const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+                const currentIndex = ref(0);
+                const currentMode = ref('practice'); // 'practice' or 'quiz'
+                const practiceText = ref('');
+                const practiceCount = ref(0);
+                const quizText = ref('');
+                const isDayCompleted = ref(false);
+
+                const practiceInput = ref(null);
+                const quizInput = ref(null);
+
+                // LocalStorage Persistence
+                onMounted(() => {
+                    const savedWords = localStorage.getItem('vocab_all_words');
+                    const savedLearned = localStorage.getItem('vocab_learned_ids');
+                    if (savedWords) allWords.value = JSON.parse(savedWords);
+                    if (savedLearned) learnedWordIDs.value = JSON.parse(savedLearned);
+                });
+
+                watch(learnedWordIDs, (newVal) => {
+                    localStorage.setItem('vocab_learned_ids', JSON.stringify(newVal));
+                }, { deep: true });
+
+                // File Reader & Dynamic Parser
+                const handleFileUpload = (e) => {
+                    const file = e.target.files[0];
+                    if (!file) return;
+
+                    const reader = new FileReader();
+                    reader.onload = (event) => {
+                        try {
+                            const raw = JSON.parse(event.target.result);
+                            const parsed = raw.map((item, idx) => {
+                                const norm = {};
+                                Object.keys(item).forEach(k => {
+                                    const cleanKey = k.toLowerCase().replace(/_/g, '').replace(/ /g, '');
+                                    norm[cleanKey] = item[k];
+                                });
+
+                                const getVal = (keys) => {
+                                    for (let k of keys) {
+                                        if (norm[k] !== undefined && norm[k] !== null && String(norm[k]).trim() !== '') {
+                                            return String(norm[k]).trim();
+                                        }
+                                    }
+                                    return '';
+                                };
+
+                                return {
+                                    id: idx + 1,
+                                    week: parseInt(getVal(['week', 'w'])) || 1,
+                                    day: getVal(['day', 'd']) || 'Mon',
+                                    english: getVal(['english', 'word', 'eng', 'vocab', 'vocabulary', 'target', 'title']) || 'No Word',
+                                    meaning: getVal(['meaning', 'korean', 'kor', 'trans', 'translation', 'def', 'definition', 'mean', 'ko']) || '뜻 없음',
+                                    example: getVal(['example', 'examplesentence', 'sentence', 'ex', 'sample']),
+                                    exampleMeaning: getVal(['examplemeaning', 'sentencemeaning', 'examplekorean', 'examplekor', 'exmeaning']),
+                                    customImageURL: getVal(['customimageurl', 'imageurl', 'image', 'img']) || null
+                                };
+                            });
+
+                            allWords.value = parsed;
+                            localStorage.setItem('vocab_all_words', JSON.stringify(parsed));
+                            learnedWordIDs.value = [];
+                            alert(`✅ 성공적으로 ${parsed.count || parsed.length}개 단어를 불러왔습니다!`);
+                        } catch (err) {
+                            alert('❌ JSON 올바른 형태가 아닙니다.');
+                        }
+                    };
+                    reader.readAsText(file);
+                };
+
+                // Computed Logic
+                const availableWeeks = computed(() => {
+                    const weeks = [...new Set(allWords.value.map(w => w.week))];
+                    return weeks.sort((a, b) => a - b);
+                });
+
+                const getWords = (week, day) => {
+                    const isSat = (day === 'Sat');
+                    return allWords.value.filter(w => w.week === week && (isSat ? true : w.day === day));
+                };
+
+                const isLearned = (word) => learnedWordIDs.value.includes(word.id);
+
+                const markAsLearned = (word) => {
+                    if (!isLearned(word)) {
+                        learnedWordIDs.value.push(word.id);
+                    }
+                };
+
+                const isWeekCompleted = (week) => {
+                    const words = allWords.value.filter(w => w.week === week);
+                    return words.length > 0 && words.every(w => isLearned(w));
+                };
+
+                const isWeekUnlocked = (week) => {
+                    if (availableWeeks.value.length === 0) return true;
+                    const first = availableWeeks.value[0];
+                    if (week === first) return true;
+                    const idx = availableWeeks.value.indexOf(week);
+                    if (idx > 0) {
+                        return isWeekCompleted(availableWeeks.value[idx - 1]);
+                    }
+                    return false;
+                };
+
+                const isDayDone = (week, day) => {
+                    const words = getWords(week, day);
+                    return words.length > 0 && words.every(w => isLearned(w));
+                };
+
+                const isDayUnlocked = (week, day) => {
+                    if (!isWeekUnlocked(week)) return false;
+                    const targetIdx = days.indexOf(day);
+                    if (targetIdx === 0) return true;
+
+                    for (let i = 0; i < targetIdx; i++) {
+                        const prevDayWords = getWords(week, days[i]);
+                        if (prevDayWords.length > 0 && !prevDayWords.every(w => isLearned(w))) {
+                            return false;
+                        }
+                    }
+                    return true;
+                };
+
+                const overallProgressRate = computed(() => {
+                    if (allWords.value.length === 0) return 0;
+                    return learnedWordIDs.value.length / allWords.value.length;
+                });
+
+                const getWeekProgressRate = (week) => {
+                    const words = allWords.value.filter(w => w.week === week);
+                    if (words.length === 0) return 0;
+                    const learned = words.filter(w => isLearned(w)).length;
+                    return learned / words.length;
+                };
+
+                const todayLesson = computed(() => {
+                    for (let w of availableWeeks.value) {
+                        if (isWeekUnlocked(w)) {
+                            for (let d of days) {
+                                if (isDayUnlocked(w, d)) {
+                                    const words = getWords(w, d);
+                                    if (words.length > 0 && !words.every(item => isLearned(item))) {
+                                        return { week: w, day: d };
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    return { week: availableWeeks.value[0] || 1, day: 'Mon' };
+                });
+
+                const getDayBtnClass = (week, day) => {
+                    if (isDayDone(week, day)) return 'bg-green-100 text-green-800';
+                    if (isDayUnlocked(week, day)) return 'bg-rose-50 text-rose-700 hover:bg-rose-100';
+                    return 'bg-slate-100 text-slate-400';
+                };
+
+                // Learning Flow
+                const currentWordList = computed(() => getWords(currentWeek.value, selectedDay.value));
+                const currentWord = computed(() => currentWordList.value[currentIndex.value] || null);
+                const learnedInDayCount = computed(() => currentWordList.value.filter(w => isLearned(w)).length);
+
+                const startLesson = (week, day) => {
+                    currentWeek.value = week;
+                    selectedDay.value = day;
+                    activeScreen.value = 'learning';
+                    resetDayProgress();
+                };
+
+                const changeDay = (day) => {
+                    selectedDay.value = day;
+                    resetDayProgress();
+                };
+
+                const resetDayProgress = () => {
+                    currentIndex.value = 0;
+                    currentMode.value = 'practice';
+                    practiceText.value = '';
+                    practiceCount.value = 0;
+                    quizText.value = '';
+                    isDayCompleted.value = false;
+                    focusInput();
+                    if (currentWord.value) speak(currentWord.value.english);
+                };
+
+                const focusInput = () => {
+                    nextTick(() => {
+                        if (currentMode.value === 'practice' && practiceInput.value) {
+                            practiceInput.value.focus();
+                        } else if (currentMode.value === 'quiz' && quizInput.value) {
+                            quizInput.value.focus();
+                        }
+                    });
+                };
+
+                const isCharCorrect = (char, idx) => {
+                    if (!currentWord.value) return false;
+                    const target = currentWord.value.english;
+                    return idx < target.length && char.toLowerCase() === target[idx].toLowerCase();
+                };
+
+                const isQuizCharCorrect = (char, idx) => isCharCorrect(char, idx);
+
+                const onPracticeInput = (e) => {
+                    if (!currentWord.value) return;
+                    const val = practiceText.value;
+                    const target = currentWord.value.english;
+
+                    if (val.length > 0) {
+                        const lastChar = val[val.length - 1];
+                        const lastIdx = val.length - 1;
+                        if (lastIdx < target.length && lastChar.toLowerCase() === target[lastIdx].toLowerCase()) {
+                            playTypingSound();
+                        } else {
+                            playErrorSound();
+                        }
+                    }
+
+                    if (val.trim().toLowerCase() === target.toLowerCase()) {
+                        playCorrectSound();
+                        practiceCount.value++;
+                        practiceText.value = '';
+
+                        if (practiceCount.value >= 3) {
+                            currentMode.value = 'quiz';
+                            focusInput();
+                        }
+                    }
+                };
+
+                const submitQuiz = () => {
+                    if (!currentWord.value) return;
+                    const target = currentWord.value.english;
+                    if (quizText.value.trim().toLowerCase() === target.toLowerCase()) {
+                        playCorrectSound();
+                        markAsLearned(currentWord.value);
+                        quizText.value = '';
+                        practiceText.value = '';
+                        practiceCount.value = 0;
+                        currentMode.value = 'practice';
+
+                        if (currentIndex.value + 1 < currentWordList.value.length) {
+                            currentIndex.value++;
+                            focusInput();
+                            speak(currentWord.value.english);
+                        } else {
+                            isDayCompleted.value = true;
+                        }
+                    } else {
+                        playErrorSound();
+                    }
+                };
+
+                const advanceToNextDay = () => {
+                    const targetIdx = days.indexOf(selectedDay.value);
+                    if (targetIdx < days.length - 1) {
+                        selectedDay.value = days[targetIdx + 1];
+                    } else {
+                        const weekIdx = availableWeeks.value.indexOf(currentWeek.value);
+                        if (weekIdx < availableWeeks.value.length - 1) {
+                            currentWeek.value = availableWeeks.value[weekIdx + 1];
+                            selectedDay.value = 'Mon';
+                        }
+                    }
+                    resetDayProgress();
+                };
+
+                const resetProgress = () => {
+                    if (confirm('정말로 모든 학습 진도를 초기화하시겠습니까?')) {
+                        learnedWordIDs.value = [];
+                    }
+                };
+
+                const getWordImage = (word) => {
+                    if (word.customImageURL) return word.customImageURL;
+                    return `https://loremflickr.com/500/400/${encodeURIComponent(word.english.toLowerCase())},illustration,cartoon/all`;
+                };
+
+                const handleImgError = (e) => {
+                    e.target.src = 'https://via.placeholder.com/500x400/f8fafc/cbd5e1?text=No+Image';
+                };
+
+                return {
+                    activeScreen, allWords, learnedWordIDs, currentWeek, selectedDay, days,
+                    currentIndex, currentMode, practiceText, practiceCount, quizText, isDayCompleted,
+                    practiceInput, quizInput,
+                    handleFileUpload, availableWeeks, getWords, isLearned, isWeekUnlocked, isWeekCompleted,
+                    isDayUnlocked, isDayDone, overallProgressRate, getWeekProgressRate, todayLesson, getDayBtnClass,
+                    currentWordList, currentWord, learnedInDayCount, startLesson, changeDay, resetDayProgress,
+                    isCharCorrect, isQuizCharCorrect, onPracticeInput, submitQuiz, advanceToNextDay, resetProgress,
+                    speak, getWordImage, handleImgError
+                };
+            }
+        }).mount('#app');
+    </script>
+</body>
+</html>
