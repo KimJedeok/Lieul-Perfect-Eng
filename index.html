@@ -354,7 +354,7 @@
     <script>
         const { createApp, ref, computed, watch, nextTick, onMounted } = Vue;
 
-        // IndexedDB Helper (이미지 영구 저장용)
+        // IndexedDB Helper (이미지 대용량 저장 전용)
         const dbName = "VocabAppDB";
         const openDB = () => {
             return new Promise((resolve, reject) => {
@@ -371,17 +371,21 @@
         };
 
         const saveImagesToIDB = async (imagesObj) => {
-            const db = await openDB();
-            return new Promise((resolve, reject) => {
-                const tx = db.transaction('images', 'readwrite');
-                const store = tx.objectStore('images');
-                store.clear();
-                for (const [key, val] of Object.entries(imagesObj)) {
-                    store.put(val, key.toLowerCase());
-                }
-                tx.oncomplete = () => resolve();
-                tx.onerror = (e) => reject(e);
-            });
+            try {
+                const db = await openDB();
+                return new Promise((resolve, reject) => {
+                    const tx = db.transaction('images', 'readwrite');
+                    const store = tx.objectStore('images');
+                    store.clear();
+                    for (const [key, val] of Object.entries(imagesObj)) {
+                        store.put(val, key.toLowerCase());
+                    }
+                    tx.oncomplete = () => resolve();
+                    tx.onerror = (e) => reject(e);
+                });
+            } catch (e) {
+                console.warn('IndexedDB 저장 한계 또는 오류 발생:', e);
+            }
         };
 
         const loadImagesFromIDB = async () => {
@@ -467,7 +471,7 @@
                 // Modal State
                 const showConfirmModal = ref(false);
 
-                // Auto-Load from LocalStorage & IndexedDB on Startup
+                // Auto-Load on Startup
                 onMounted(async () => {
                     try {
                         const savedWords = localStorage.getItem('vocab_all_words');
@@ -484,16 +488,18 @@
                             savedDate.value = savedDateVal;
                         }
 
-                        // IndexedDB에서 이미지 맵 복원
+                        // IndexedDB에서 이미지 복원
                         imageMap.value = await loadImagesFromIDB();
                     } catch (e) {
-                        console.error('로컬 데이터 불러오기 실패:', e);
+                        console.error('데이터 복원 로드 오류:', e);
                     }
                 });
 
                 // Auto-Save Learned Progress
                 watch(learnedWordIDs, (newVal) => {
-                    localStorage.setItem('vocab_learned_ids', JSON.stringify(newVal));
+                    try {
+                        localStorage.setItem('vocab_learned_ids', JSON.stringify(newVal));
+                    } catch (e) {}
                 }, { deep: true });
 
                 // Modal Functions
@@ -519,16 +525,14 @@
 
                     try {
                         if (typeof JSZip === 'undefined') {
-                            alert('❌ JSZip 라이브러리가 준비되지 않았습니다. 와이파이 연결 상태를 확인하고 새로고침해 주세요.');
+                            alert('❌ JSZip 라이브러리가 준비되지 않았습니다. 와이파이 연결 상태를 확인 후 새로고침해 주세요.');
                             e.target.value = '';
                             return;
                         }
 
                         if (file.name.toLowerCase().endsWith('.zip')) {
-                            // ZIP 파일 처리
                             const zip = await JSZip.loadAsync(file);
                             
-                            // 숨김 파일 및 맥/아이패드 시스템 파일(__MACOSX, ._ 파일) 필터링
                             const isRealFile = (f) => {
                                 const name = f.name;
                                 const fileName = name.split('/').pop();
@@ -544,14 +548,13 @@
                             }
 
                             let jsonText = await jsonFiles[0].async('text');
-                            // UTF-8 BOM 제거
-                            jsonText = jsonText.replace(/^\uFEFF/, '');
+                            jsonText = jsonText.replace(/^\uFEFF/, ''); // BOM 제거
 
                             let raw;
                             try {
                                 raw = JSON.parse(jsonText);
                             } catch (jsonErr) {
-                                alert(`❌ JSON 파일 읽기 실패 (${jsonFiles[0].name})\nJSON 코드 문법에 오류가 있습니다.\n\n세부내용: ${jsonErr.message}`);
+                                alert(`❌ JSON 파일 문법 오류 (${jsonFiles[0].name})\n\n상세: ${jsonErr.message}`);
                                 e.target.value = '';
                                 return;
                             }
@@ -579,15 +582,14 @@
                                 extractedImages[fileNameWithoutExt] = dataUrl;
                             }
 
-                            // IndexedDB 및 Reactive State에 이미지 저장
+                            // IndexedDB에 대용량 이미지 저장
                             await saveImagesToIDB(extractedImages);
                             imageMap.value = extractedImages;
 
-                            // 3. 단어 데이터 파싱 및 저장
-                            parseAndSaveWords(raw, extractedImages);
+                            // 3. 단어 데이터 파싱 및 저장 (메모리 경량화 저장)
+                            parseAndSaveWords(raw);
 
                         } else if (file.name.toLowerCase().endsWith('.json')) {
-                            // 기존 단일 JSON 파일 처리
                             const reader = new FileReader();
                             reader.onload = async (event) => {
                                 try {
@@ -595,7 +597,7 @@
                                     const raw = JSON.parse(text);
                                     await saveImagesToIDB({});
                                     imageMap.value = {};
-                                    parseAndSaveWords(raw, {});
+                                    parseAndSaveWords(raw);
                                 } catch (err) {
                                     alert(`❌ JSON 문법 오류: ${err.message}`);
                                 }
@@ -606,11 +608,10 @@
                         console.error(err);
                         alert(`❌ 파일을 처리하는 중 오류가 발생했습니다.\n\n오류 상세: ${err.message || err}`);
                     }
-                    e.target.value = ''; // Input Reset
+                    e.target.value = '';
                 };
 
-                const parseAndSaveWords = (raw, imagesDict = {}) => {
-                    // 데이터 구조 파싱 (배열 형태 및 객체 형태 호환)
+                const parseAndSaveWords = (raw) => {
                     let list = [];
                     if (Array.isArray(raw)) {
                         list = raw;
@@ -619,7 +620,7 @@
                     }
 
                     if (!Array.isArray(list) || list.length === 0) {
-                        alert('❌ 단어장에 유효한 단어 데이터가 없거나 형식이 올바르지 않습니다.');
+                        alert('❌ 단어장에 유효한 단어 데이터가 없습니다.');
                         return;
                     }
 
@@ -642,33 +643,6 @@
                         const engWord = getVal(['english', 'word', 'eng', 'vocab', 'vocabulary', 'target', 'title']) || 'No Word';
                         const specifiedImg = getVal(['customimageurl', 'imageurl', 'image', 'img']);
 
-                        let finalImgUrl = null;
-
-                        // 1) JSON 내부에 명시된 파일명이 ZIP 이미지에 있는지 확인
-                        if (specifiedImg) {
-                            const lowerSpec = specifiedImg.toLowerCase();
-                            const specWithoutPath = lowerSpec.split('/').pop();
-                            const specWithoutExt = specWithoutPath.substring(0, specWithoutPath.lastIndexOf('.')) || specWithoutPath;
-
-                            if (imagesDict[lowerSpec]) {
-                                finalImgUrl = imagesDict[lowerSpec];
-                            } else if (imagesDict[specWithoutPath]) {
-                                finalImgUrl = imagesDict[specWithoutPath];
-                            } else if (imagesDict[specWithoutExt]) {
-                                finalImgUrl = imagesDict[specWithoutExt];
-                            } else if (specifiedImg.startsWith('http') || specifiedImg.startsWith('data:')) {
-                                finalImgUrl = specifiedImg;
-                            }
-                        }
-
-                        // 2) 영단어 이름과 일치하는 이미지 파일이 있는지 매칭 (예: apple -> apple.jpg/png)
-                        if (!finalImgUrl) {
-                            const engLower = engWord.toLowerCase().trim();
-                            if (imagesDict[engLower]) {
-                                finalImgUrl = imagesDict[engLower];
-                            }
-                        }
-
                         return {
                             id: idx + 1,
                             week: parseInt(getVal(['week', 'w'])) || 1,
@@ -677,22 +651,25 @@
                             meaning: getVal(['meaning', 'korean', 'kor', 'trans', 'translation', 'def', 'definition', 'mean', 'ko']) || '뜻 없음',
                             example: getVal(['example', 'examplesentence', 'sentence', 'ex', 'sample']),
                             exampleMeaning: getVal(['examplemeaning', 'sentencemeaning', 'examplekorean', 'examplekor', 'exmeaning']),
-                            customImageURL: finalImgUrl || null
+                            imageFileName: specifiedImg || null // 대용량 base64는 제외하고 파일명만 보관
                         };
                     });
 
                     allWords.value = parsed;
                     learnedWordIDs.value = [];
                     
-                    // 날짜 포맷
                     const now = new Date();
                     const formattedDate = `${now.getFullYear()}.${String(now.getMonth()+1).padStart(2, '0')}.${String(now.getDate()).padStart(2, '0')} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
                     savedDate.value = formattedDate;
 
-                    // LocalStorage 저장
-                    localStorage.setItem('vocab_all_words', JSON.stringify(parsed));
-                    localStorage.setItem('vocab_learned_ids', JSON.stringify([]));
-                    localStorage.setItem('vocab_saved_date', formattedDate);
+                    // LocalStorage 안전 저장 (Base64 용량 제외로 용량 초과 방지)
+                    try {
+                        localStorage.setItem('vocab_all_words', JSON.stringify(parsed));
+                        localStorage.setItem('vocab_learned_ids', JSON.stringify([]));
+                        localStorage.setItem('vocab_saved_date', formattedDate);
+                    } catch (e) {
+                        console.warn('로컬스토리지 저장 용량 한계 (메모리로 계속 작동합니다):', e);
+                    }
 
                     alert(`✅ 총 ${parsed.length}개 단어가 저장되었습니다!`);
                 };
@@ -908,16 +885,29 @@
                     }
                 };
 
+                // IndexedDB 및 파일명 동적 매칭
                 const getWordImage = (word) => {
-                    if (word.customImageURL) return word.customImageURL;
-                    
-                    // IndexedDB에서 매칭된 이미지 탐색
+                    if (!word) return '';
+
+                    // 1. JSON 파일명 지정 매칭
+                    if (word.imageFileName) {
+                        const lowerSpec = word.imageFileName.toLowerCase().trim();
+                        const specWithoutPath = lowerSpec.split('/').pop();
+                        const specWithoutExt = specWithoutPath.substring(0, specWithoutPath.lastIndexOf('.')) || specWithoutPath;
+
+                        if (imageMap.value[lowerSpec]) return imageMap.value[lowerSpec];
+                        if (imageMap.value[specWithoutPath]) return imageMap.value[specWithoutPath];
+                        if (imageMap.value[specWithoutExt]) return imageMap.value[specWithoutExt];
+                        if (word.imageFileName.startsWith('http')) return word.imageFileName;
+                    }
+
+                    // 2. 영단어 매칭
                     if (imageMap.value) {
                         const engLower = word.english.toLowerCase().trim();
                         if (imageMap.value[engLower]) return imageMap.value[engLower];
                     }
 
-                    // 기본 플레이스홀더 이미지
+                    // 3. 웹 대체 이미지
                     return `https://loremflickr.com/500/400/${encodeURIComponent(word.english.toLowerCase())},illustration,cartoon/all`;
                 };
 
