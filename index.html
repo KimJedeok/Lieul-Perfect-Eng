@@ -311,6 +311,7 @@
                                 <div class="flex gap-2">
                                     <input ref="quizInput"
                                            v-model="quizText"
+                                           @input="onQuizInput"
                                            @keyup.enter="submitQuiz"
                                            type="text"
                                            autocapitalize="off"
@@ -364,6 +365,7 @@
                                 <div class="flex gap-2">
                                     <input ref="quizInput"
                                            v-model="quizText"
+                                           @input="onQuizInput"
                                            @keyup.enter="submitQuiz"
                                            type="text"
                                            autocapitalize="off"
@@ -911,6 +913,7 @@
                     return idx < target.length && char.toLowerCase() === target[idx].toLowerCase();
                 };
 
+                // 1단계 타이핑 음향 효과 (실시간 정오답 피드백)
                 const onPracticeInput = (e) => {
                     if (!currentWord.value) return;
                     const val = practiceText.value;
@@ -923,6 +926,29 @@
                             playTypingSound();
                         } else {
                             playErrorSound();
+                        }
+                    }
+                };
+
+                // 2단계 타이핑 음향 효과 (1부: 정오답 피드백, 2부: 단순 타이핑음)
+                const onQuizInput = (e) => {
+                    if (!currentWord.value) return;
+                    const val = quizText.value;
+                    const target = currentWord.value.english;
+
+                    if (val.length > 0) {
+                        if (quizSubStage.value === 1) {
+                            // 2단계 1부 (빈칸 채우기): 실시간 정오답 피드백
+                            const lastChar = val[val.length - 1];
+                            const lastIdx = val.length - 1;
+                            if (lastIdx < target.length && lastChar.toLowerCase() === target[lastIdx].toLowerCase()) {
+                                playTypingSound();
+                            } else {
+                                playErrorSound();
+                            }
+                        } else {
+                            // 2단계 2부 (사운드 블라인드): 스포일러 방지용 단순 입력 소리만 재생
+                            playTypingSound();
                         }
                     }
                 };
@@ -973,7 +999,9 @@
                             focusInput();
                         }
                     } else {
+                        // 1단계 오답 시: 경고음 + 입력창 자동 비우기
                         playErrorSound();
+                        practiceText.value = '';
                     }
                 };
 
@@ -1069,10 +1097,12 @@
                             }
                         }
                     } else {
+                        // 2단계 오답 시: 경고음 + 입력창 자동 비우기
                         playErrorSound();
                         if (quizSubStage.value === 2) {
                             soundBlindFailCount.value++;
                         }
+                        quizText.value = '';
                     }
                 };
 
@@ -1132,7 +1162,7 @@
                     availableWeeks, getWords, isLearned, isWeekUnlocked, isWeekCompleted,
                     isDayUnlocked, isDayDone, overallProgressRate, getWeekProgressRate, todayLesson, getDayBtnClass,
                     currentWordList, currentWord, learnedInDayCount, startLesson, changeDay, resetDayProgress,
-                    isCharCorrect, onPracticeInput, submitPractice, submitQuiz, advanceToNextDay, resetProgress,
+                    isCharCorrect, onPracticeInput, onQuizInput, submitPractice, submitQuiz, advanceToNextDay, resetProgress,
                     clearPracticeInput, clearQuizInput, speak, getWordImage, handleImgError
                 };
             }
