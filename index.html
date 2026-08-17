@@ -159,23 +159,52 @@
                 </button>
             </div>
 
-            <!-- Daily Review Screen (All Stages Cleared) -->
-            <div v-if="isDayCompleted && !stage3Active" class="bg-white p-6 rounded-2xl shadow-sm text-center space-y-4 my-auto">
-                <h2 class="text-2xl font-black text-rose-500">🎉 오늘 공부 최종 완주!</h2>
-                <p class="text-slate-500 text-sm font-semibold">1, 2, 3단계를 모두 성공하셨습니다. 배운 단어를 복습해보세요.</p>
-                <div class="max-h-52 overflow-y-auto space-y-2 text-left bg-slate-50 p-3 rounded-xl border border-slate-200">
-                    <div v-for="w in currentWordList" :key="w.id" class="flex justify-between items-center p-2 border-b last:border-0">
+            <!-- Daily Review Screen (All Stages Cleared) - 한 화면에 쏙 들어오는 컴팩트 레이아웃 & 정답률 배지 -->
+            <div v-if="isDayCompleted && !stage3Active" class="bg-white p-4 rounded-2xl shadow-sm border border-slate-100 flex-1 flex flex-col justify-between space-y-3 my-auto max-h-[85vh]">
+                <!-- Compact Header Banner -->
+                <div class="flex justify-between items-center bg-rose-50 border border-rose-200/80 p-3 rounded-xl">
+                    <div class="flex items-center gap-2">
+                        <span class="text-2xl">🏆</span>
                         <div>
-                            <span class="font-bold text-slate-800 text-sm">{{ w.english }}</span>
-                            <span class="text-xs text-slate-500 ml-2">{{ w.meaning }}</span>
+                            <h2 class="text-base md:text-lg font-black text-slate-800">오늘 공부 최종 완주! 🎉</h2>
+                            <p class="text-xs font-semibold text-slate-500">학습한 {{ currentWordList.length }}개 단어의 정답률 기록입니다.</p>
                         </div>
-                        <button @click="speak(w.english, 0.7)" class="text-purple-600 p-1">🔊</button>
                     </div>
                 </div>
-                <div class="flex flex-col sm:flex-row gap-2">
-                    <button @click="resetDayProgress(true)" class="flex-1 bg-slate-100 hover:bg-slate-200 font-bold py-2.5 rounded-xl text-sm">1단계부터 다시하기</button>
-                    <button @click="startStage3" class="flex-1 bg-indigo-50 border border-indigo-200 hover:bg-indigo-100 font-bold py-2.5 rounded-xl text-sm text-indigo-700">3단계 테스트만 다시하기 🎨</button>
-                    <button @click="advanceToNextDay" class="flex-1 bg-rose-500 hover:bg-rose-600 text-white font-bold py-2.5 rounded-xl shadow-md text-sm">다음 학습으로 →</button>
+
+                <!-- Word List Grid with Accuracy Badges (Compact Single Screen) -->
+                <div class="flex-1 overflow-y-auto pr-1">
+                    <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
+                        <div v-for="w in currentWordList" :key="w.id" class="flex justify-between items-center bg-slate-50 border border-slate-200/70 p-2.5 rounded-xl hover:bg-white transition">
+                            <div class="min-w-0 flex-1 mr-2">
+                                <div class="flex items-center gap-1.5">
+                                    <span class="font-bold text-slate-900 text-sm truncate">{{ w.english }}</span>
+                                    <button @click="speak(w.english, 0.7)" class="text-purple-600 hover:text-purple-800 text-xs flex-shrink-0">🔊</button>
+                                </div>
+                                <div class="text-xs text-slate-500 truncate font-medium">{{ w.meaning }}</div>
+                            </div>
+                            <!-- Accuracy Badge -->
+                            <div class="flex-shrink-0">
+                                <span class="px-2 py-0.5 rounded-md text-[11px] font-extrabold border" :class="getAccuracyBadgeClass(getWordAccuracy(w.id))">
+                                    {{ getWordAccuracy(w.id) !== null ? `🎯 ${getWordAccuracy(w.id)}%` : '🆕 신규' }}
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Bottom Actions in One Single Row -->
+                <div class="flex gap-2 pt-1 border-t border-slate-100">
+                    <button @click="resetDayProgress(true)" class="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold py-2.5 rounded-xl text-xs md:text-sm transition">
+                        🔄 1단계부터
+                    </button>
+                    <button @click="startStage3" class="flex-1 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 text-indigo-700 font-bold py-2.5 rounded-xl text-xs md:text-sm transition">
+                        🎨 3단계 테스트만
+                    </button>
+                    <button @click="advanceToNextDay" class="flex-[1.5] bg-rose-500 hover:bg-rose-600 text-white font-black py-2.5 rounded-xl shadow-md text-xs md:text-sm transition flex items-center justify-center gap-1">
+                        <span>다음 학습으로</span>
+                        <span>→</span>
+                    </button>
                 </div>
             </div>
 
@@ -654,6 +683,35 @@
                 const selectedDay = ref('Mon');
                 const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
+                // 정답률 기록용 상태 ({ [wordId]: { correct: 0, total: 0 } })
+                const wordStats = ref({});
+
+                const recordAttempt = (wordId, isCorrect) => {
+                    if (!wordId) return;
+                    if (!wordStats.value[wordId]) {
+                        wordStats.value[wordId] = { correct: 0, total: 0 };
+                    }
+                    wordStats.value[wordId].total += 1;
+                    if (isCorrect) wordStats.value[wordId].correct += 1;
+
+                    try {
+                        localStorage.setItem('vocab_word_stats', JSON.stringify(wordStats.value));
+                    } catch (e) {}
+                };
+
+                const getWordAccuracy = (wordId) => {
+                    const stat = wordStats.value[wordId];
+                    if (!stat || stat.total === 0) return null;
+                    return Math.round((stat.correct / stat.total) * 100);
+                };
+
+                const getAccuracyBadgeClass = (rate) => {
+                    if (rate === null) return 'bg-slate-100 text-slate-600 border-slate-200';
+                    if (rate >= 80) return 'bg-emerald-100 text-emerald-700 border-emerald-300';
+                    if (rate >= 50) return 'bg-amber-100 text-amber-700 border-amber-300';
+                    return 'bg-rose-100 text-rose-700 border-rose-300';
+                };
+
                 const currentIndex = ref(0);
                 const currentMode = ref('practice');
                 const practiceText = ref('');
@@ -702,10 +760,12 @@
                         const savedWords = localStorage.getItem('vocab_all_words');
                         const savedLearned = localStorage.getItem('vocab_learned_ids');
                         const savedDateVal = localStorage.getItem('vocab_saved_date');
+                        const savedStats = localStorage.getItem('vocab_word_stats');
 
                         if (savedWords) allWords.value = JSON.parse(savedWords);
                         if (savedLearned) learnedWordIDs.value = JSON.parse(savedLearned);
                         if (savedDateVal) savedDate.value = savedDateVal;
+                        if (savedStats) wordStats.value = JSON.parse(savedStats);
 
                         imageMap.value = await loadImagesFromIDB();
                     } catch (e) {
@@ -1035,6 +1095,7 @@
                 const submitPractice = () => {
                     if (!currentWord.value) return;
                     if (practiceText.value.trim().toLowerCase() === currentWord.value.english.toLowerCase()) {
+                        recordAttempt(currentWord.value.id, true);
                         playCorrectSound();
                         practiceCount.value++;
                         practiceText.value = '';
@@ -1051,6 +1112,7 @@
                             focusInput();
                         }
                     } else {
+                        recordAttempt(currentWord.value.id, false);
                         playErrorSound();
                         practiceText.value = '';
                     }
@@ -1070,6 +1132,7 @@
                     const target = currentWord.value.english;
 
                     if (quizText.value.trim().toLowerCase() === target.toLowerCase()) {
+                        recordAttempt(currentWord.value.id, true);
                         playCorrectSound();
                         quizText.value = '';
 
@@ -1103,6 +1166,7 @@
                             }
                         }
                     } else {
+                        recordAttempt(currentWord.value.id, false);
                         playErrorSound();
                         if (quizSubStage.value === 2) soundBlindFailCount.value++;
                         quizText.value = '';
@@ -1247,11 +1311,13 @@
                         }
 
                         if (result.isCorrect) {
+                            recordAttempt(currentStage3Item.value.word.id, true);
                             playCorrectSound();
                             const randomPraise = praiseList[Math.floor(Math.random() * praiseList.length)];
                             alert(randomPraise);
                             nextStage3Question();
                         } else {
+                            recordAttempt(currentStage3Item.value.word.id, false);
                             playErrorSound();
                             stage3AnswerRevealed.value = true;
                             speak(targetWord, 0.75);
@@ -1288,9 +1354,11 @@
                 const submitStage3MCQ = (selectedOpt) => {
                     if (!currentStage3Item.value) return;
                     if (selectedOpt.toLowerCase() === currentStage3Item.value.word.english.toLowerCase()) {
+                        recordAttempt(currentStage3Item.value.word.id, true);
                         playCorrectSound();
                         nextStage3Question();
                     } else {
+                        recordAttempt(currentStage3Item.value.word.id, false);
                         playErrorSound();
                     }
                 };
@@ -1342,6 +1410,7 @@
 
                 return {
                     activeScreen, allWords, learnedWordIDs, savedDate, currentWeek, selectedDay, days,
+                    wordStats, recordAttempt, getWordAccuracy, getAccuracyBadgeClass,
                     currentIndex, currentMode, practiceText, practiceCount, quizText, isDayCompleted,
                     quizSubStage, quizPart1Count, quizPart2Count, quizBlanks, soundBlindFailCount, hintLevel,
                     stage3Active, stage3List, stage3Index, stage3AnswerRevealed, currentStage3Item,
