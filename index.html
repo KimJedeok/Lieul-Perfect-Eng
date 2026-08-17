@@ -142,7 +142,7 @@
                 </div>
 
                 <div class="text-xs font-bold text-slate-400">
-                    학습중
+                    {{ stage3Active ? '3단계 테스트 중' : '학습 중' }}
                 </div>
             </div>
 
@@ -157,10 +157,10 @@
                 </button>
             </div>
 
-            <!-- Daily Review Screen -->
-            <div v-if="isDayCompleted" class="bg-white p-6 rounded-2xl shadow-sm text-center space-y-4 my-auto">
-                <h2 class="text-2xl font-black text-rose-500">🎉 오늘 공부 완주!</h2>
-                <p class="text-slate-500 text-sm font-semibold">배운 단어를 복습해보세요. 다음 진도가 해금되었습니다.</p>
+            <!-- Daily Review Screen (All Stages Cleared) -->
+            <div v-if="isDayCompleted && !stage3Active" class="bg-white p-6 rounded-2xl shadow-sm text-center space-y-4 my-auto">
+                <h2 class="text-2xl font-black text-rose-500">🎉 오늘 공부 최종 완주!</h2>
+                <p class="text-slate-500 text-sm font-semibold">1, 2, 3단계를 모두 성공하셨습니다. 배운 단어를 복습해보세요.</p>
                 <div class="max-h-52 overflow-y-auto space-y-2 text-left bg-slate-50 p-3 rounded-xl border border-slate-200">
                     <div v-for="w in currentWordList" :key="w.id" class="flex justify-between items-center p-2 border-b last:border-0">
                         <div>
@@ -170,14 +170,128 @@
                         <button @click="speak(w.english, 0.7)" class="text-purple-600 p-1">🔊</button>
                     </div>
                 </div>
-                <div class="flex gap-3">
-                    <button @click="resetDayProgress(true)" class="flex-1 bg-slate-100 hover:bg-slate-200 font-bold py-2.5 rounded-xl text-sm">다시 학습하기</button>
+                <div class="flex flex-col sm:flex-row gap-2">
+                    <button @click="resetDayProgress(true)" class="flex-1 bg-slate-100 hover:bg-slate-200 font-bold py-2.5 rounded-xl text-sm">1단계부터 다시하기</button>
+                    <button @click="startStage3" class="flex-1 bg-indigo-50 border border-indigo-200 hover:bg-indigo-100 font-bold py-2.5 rounded-xl text-sm text-indigo-700">3단계 테스트만 다시하기 🎨</button>
                     <button @click="advanceToNextDay" class="flex-1 bg-rose-500 hover:bg-rose-600 text-white font-bold py-2.5 rounded-xl shadow-md text-sm">다음 학습으로 →</button>
                 </div>
             </div>
 
-            <!-- Learning Active View -->
-            <div v-else-if="currentWord" class="space-y-3 flex-1 flex flex-col">
+            <!-- STAGE 3: Final Challenge View -->
+            <div v-else-if="stage3Active && currentStage3Item" class="bg-white p-4 rounded-2xl shadow-sm border border-slate-100 flex-1 flex flex-col justify-between space-y-3">
+                <div class="text-center bg-indigo-100 text-indigo-800 py-1.5 px-4 rounded-full text-sm font-bold w-fit mx-auto">
+                    3단계: 종합 마무리 테스트 🏆 ({{ stage3Index + 1 }} / {{ stage3List.length }})
+                </div>
+
+                <!-- TYPE A: Pencil Writing Challenge -->
+                <div v-if="currentStage3Item.type === 'pencil'" class="space-y-3 flex-1 flex flex-col">
+                    <div class="text-center space-y-1">
+                        <span class="text-xs font-bold text-indigo-600 bg-indigo-50 px-2.5 py-0.5 rounded-full border border-indigo-200">✍️ 펜슬 쓰기 미션</span>
+                        <h3 class="text-xl font-bold text-slate-800">'{{ currentStage3Item.word.meaning }}'을(를) 밑에 써보세요!</h3>
+                    </div>
+
+                    <!-- Canvas Container -->
+                    <div class="relative flex-1 min-h-[200px] border-2 border-indigo-200 rounded-2xl bg-indigo-50/30 overflow-hidden flex items-center justify-center">
+                        <canvas ref="canvasRef"
+                                @pointerdown="startDrawing"
+                                @pointermove="draw"
+                                @pointerup="stopDrawing"
+                                @pointercancel="stopDrawing"
+                                class="absolute inset-0 w-full h-full touch-none cursor-crosshair z-10"></canvas>
+                        
+                        <!-- Overlay Guide Lines / Answer -->
+                        <div v-if="stage3AnswerRevealed" class="absolute inset-0 flex items-center justify-center pointer-events-none z-0">
+                            <span class="text-6xl md:text-7xl font-black text-rose-400/40 font-mono tracking-widest select-none">
+                                {{ currentStage3Item.word.english }}
+                            </span>
+                        </div>
+
+                        <button @click="clearCanvas" class="absolute top-2 right-2 bg-white/80 hover:bg-white text-slate-700 text-xs font-bold px-2.5 py-1.5 rounded-lg border border-slate-200 shadow-sm z-20">
+                            🧹 싹 지우기
+                        </button>
+                    </div>
+
+                    <!-- Answer Check Controls -->
+                    <div class="space-y-2">
+                        <div v-if="!stage3AnswerRevealed">
+                            <button @click="revealPencilAnswer" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 rounded-xl shadow-md text-base transition">
+                                🔍 정답 확인하기
+                            </button>
+                        </div>
+                        <div v-else class="flex gap-2">
+                            <button @click="clearCanvas" class="flex-1 bg-slate-200 hover:bg-slate-300 text-slate-800 font-bold py-3 rounded-xl text-sm transition">
+                                🔄 다시 쓰기
+                            </button>
+                            <button @click="nextStage3Question" class="flex-1 bg-emerald-500 hover:bg-emerald-600 text-white font-bold py-3 rounded-xl shadow-md text-sm transition">
+                                맞았어요! 다음으로 →
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- TYPE B: Speed Typing Challenge -->
+                <div v-else-if="currentStage3Item.type === 'typing'" class="space-y-4 my-auto">
+                    <div class="text-center space-y-1">
+                        <span class="text-xs font-bold text-amber-600 bg-amber-50 px-2.5 py-0.5 rounded-full border border-amber-200">⚡ 스피드 타자 미션</span>
+                        <h3 class="text-xl font-bold text-slate-800">단어를 빠르게 타이핑하세요!</h3>
+                    </div>
+
+                    <div class="bg-amber-50 border border-amber-200 p-5 rounded-2xl text-center space-y-3">
+                        <div class="text-2xl font-bold text-amber-900">'{{ currentStage3Item.word.meaning }}'</div>
+                        <button @click="speak(currentStage3Item.word.english, 0.75)" class="bg-amber-200 hover:bg-amber-300 text-amber-900 font-bold px-3.5 py-1.5 rounded-xl text-xs inline-flex items-center gap-1 shadow-sm transition">
+                            🔊 발음 듣기
+                        </button>
+                    </div>
+
+                    <div class="space-y-2 max-w-sm mx-auto">
+                        <input ref="stage3InputRef"
+                               v-model="stage3Text"
+                               @keyup.enter="submitStage3Typing"
+                               type="text"
+                               autocapitalize="off"
+                               autocorrect="off"
+                               spellcheck="false"
+                               placeholder="영어 단어 입력"
+                               class="w-full h-12 px-3.5 bg-white border-2 border-amber-400 rounded-xl font-bold text-xl text-center text-slate-900 focus:outline-none focus:border-amber-600 shadow-inner">
+                        <button @click="submitStage3Typing" class="w-full bg-amber-500 hover:bg-amber-600 text-slate-900 font-black py-3 rounded-xl shadow-md text-base transition">
+                            확인 제출
+                        </button>
+                    </div>
+                </div>
+
+                <!-- TYPE C: Easy Example Blank MCQ Challenge -->
+                <div v-else-if="currentStage3Item.type === 'example'" class="space-y-4 my-auto">
+                    <div class="text-center space-y-1">
+                        <span class="text-xs font-bold text-emerald-600 bg-emerald-50 px-2.5 py-0.5 rounded-full border border-emerald-200">🧩 예문 빈칸 맞히기</span>
+                        <h3 class="text-lg font-bold text-slate-800">빈칸에 알맞은 단어를 고르세요!</h3>
+                    </div>
+
+                    <!-- Sentence Card -->
+                    <div class="bg-emerald-50 border-2 border-emerald-200 p-5 rounded-2xl text-center space-y-2 shadow-sm">
+                        <div class="text-xl md:text-2xl font-black text-slate-900 leading-relaxed">
+                            "{{ getMaskedExample(currentStage3Item.word) }}"
+                        </div>
+                        <div v-if="currentStage3Item.word.exampleMeaning" class="text-sm font-semibold text-slate-600">
+                            ({{ currentStage3Item.word.exampleMeaning }})
+                        </div>
+                        <button @click="speak(currentStage3Item.word.example, 0.65)" class="text-xs font-bold text-emerald-700 bg-emerald-100 hover:bg-emerald-200 px-3 py-1 rounded-lg border border-emerald-300 transition">
+                            🔊 예문 전체 듣기
+                        </button>
+                    </div>
+
+                    <!-- Options (Multiple Choice Buttons) -->
+                    <div class="grid grid-cols-1 sm:grid-cols-3 gap-2.5 max-w-lg mx-auto">
+                        <button v-for="(opt, idx) in currentStage3Item.mcqOptions" :key="idx"
+                                @click="submitStage3MCQ(opt)"
+                                class="py-3 px-4 bg-white hover:bg-purple-50 border-2 border-purple-200 hover:border-purple-400 text-purple-900 font-black text-lg rounded-xl shadow-sm transition active:scale-95">
+                            {{ opt }}
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Learning Active View (Stage 1 & 2) -->
+            <div v-else-if="currentWord && !stage3Active" class="space-y-3 flex-1 flex flex-col">
                 <!-- Progress Header -->
                 <div class="bg-white p-3 rounded-2xl shadow-sm space-y-1.5">
                     <div class="flex justify-between text-xs font-bold">
@@ -350,7 +464,7 @@
                                 <span>🔊 발음 다시 듣기</span>
                             </button>
 
-                            <!-- 힌트 안내 영역 (1차/2차) -->
+                            <!-- Hint Display (Level 1 / 2) -->
                             <div v-if="hintLevel > 0" class="bg-slate-700/90 border border-amber-400/60 p-3 rounded-xl max-w-xs mx-auto space-y-1 text-center shadow-inner">
                                 <div v-if="hintLevel === 1" class="text-amber-300 font-bold text-sm">
                                     💡 1차 힌트: {{ currentWord.meaning }} <span class="font-mono text-base ml-1 text-white font-black">({{ getMaskedWord(currentWord.english) }})</span>
@@ -382,7 +496,6 @@
                                     최종 제출 ({{ quizPart2Count }}/2회)
                                 </button>
 
-                                <!-- 2회 이상 실패 시 해금되는 힌트 버튼 -->
                                 <button v-if="soundBlindFailCount >= 2 && hintLevel < 2" 
                                         @click="triggerHint" 
                                         class="w-full bg-amber-400/20 hover:bg-amber-400/30 text-amber-300 border border-amber-400/50 font-bold py-2 rounded-xl text-xs transition flex items-center justify-center gap-1">
@@ -528,7 +641,7 @@
                     }
                 };
 
-                // State
+                // Base State
                 const activeScreen = ref('home');
                 const allWords = ref([]);
                 const learnedWordIDs = ref([]);
@@ -545,7 +658,7 @@
                 const quizText = ref('');
                 const isDayCompleted = ref(false);
 
-                // Stage 2 Sub-State (1: Partial Blanks, 2: Sound Blind)
+                // Stage 2 Sub-State
                 const quizSubStage = ref(1);
                 const quizPart1Count = ref(0);
                 const quizPart2Count = ref(0);
@@ -553,10 +666,21 @@
 
                 // Sound Blind Hint States
                 const soundBlindFailCount = ref(0);
-                const hintLevel = ref(0); // 0: 없음, 1: 1차(뜻+첫글자/길이), 2: 2차(전체정답+따라쓰기)
+                const hintLevel = ref(0);
 
+                // Stage 3 States
+                const stage3Active = ref(false);
+                const stage3List = ref([]);
+                const stage3Index = ref(0);
+                const stage3Text = ref('');
+                const stage3AnswerRevealed = ref(false);
+                const isDrawing = ref(false);
+
+                // Refs
                 const practiceInput = ref(null);
                 const quizInput = ref(null);
+                const stage3InputRef = ref(null);
+                const canvasRef = ref(null);
                 const fileInput = ref(null);
 
                 const showConfirmModal = ref(false);
@@ -567,15 +691,9 @@
                         const savedLearned = localStorage.getItem('vocab_learned_ids');
                         const savedDateVal = localStorage.getItem('vocab_saved_date');
 
-                        if (savedWords) {
-                            allWords.value = JSON.parse(savedWords);
-                        }
-                        if (savedLearned) {
-                            learnedWordIDs.value = JSON.parse(savedLearned);
-                        }
-                        if (savedDateVal) {
-                            savedDate.value = savedDateVal;
-                        }
+                        if (savedWords) allWords.value = JSON.parse(savedWords);
+                        if (savedLearned) learnedWordIDs.value = JSON.parse(savedLearned);
+                        if (savedDateVal) savedDate.value = savedDateVal;
 
                         imageMap.value = await loadImagesFromIDB();
                     } catch (e) {
@@ -589,20 +707,12 @@
                     } catch (e) {}
                 }, { deep: true });
 
-                const openConfirmModal = () => {
-                    showConfirmModal.value = true;
-                };
-
+                const openConfirmModal = () => showConfirmModal.value = true;
                 const confirmLoadFile = () => {
                     showConfirmModal.value = false;
-                    if (fileInput.value) {
-                        fileInput.value.click();
-                    }
+                    if (fileInput.value) fileInput.value.click();
                 };
-
-                const cancelLoadFile = () => {
-                    showConfirmModal.value = false;
-                };
+                const cancelLoadFile = () => showConfirmModal.value = false;
 
                 const handleFileUpload = async (e) => {
                     const file = e.target.files[0];
@@ -617,7 +727,6 @@
 
                         if (file.name.toLowerCase().endsWith('.zip')) {
                             const zip = await JSZip.loadAsync(file);
-                            
                             const isRealFile = (f) => {
                                 const name = f.name;
                                 const fileName = name.split('/').pop();
@@ -633,15 +742,7 @@
 
                             let jsonText = await jsonFiles[0].async('text');
                             jsonText = jsonText.replace(/^\uFEFF/, '');
-
-                            let raw;
-                            try {
-                                raw = JSON.parse(jsonText);
-                            } catch (jsonErr) {
-                                alert(`❌ JSON 파일 문법 오류 (${jsonFiles[0].name})\n\n상세: ${jsonErr.message}`);
-                                e.target.value = '';
-                                return;
-                            }
+                            let raw = JSON.parse(jsonText);
 
                             const imageFiles = zip.file(/\.(png|jpe?g|webp|gif|svg)$/i).filter(isRealFile);
                             const extractedImages = {};
@@ -650,7 +751,6 @@
                                 const fullPath = imgFile.name;
                                 const fileName = fullPath.split('/').pop();
                                 const fileNameWithoutExt = fileName.substring(0, fileName.lastIndexOf('.')).toLowerCase();
-                                
                                 const base64 = await imgFile.async('base64');
                                 let mime = 'image/jpeg';
                                 const lowerName = fileName.toLowerCase();
@@ -660,14 +760,12 @@
                                 else if (lowerName.endsWith('.svg')) mime = 'image/svg+xml';
 
                                 const dataUrl = `data:${mime};base64,${base64}`;
-                                
                                 extractedImages[lowerName] = dataUrl;
                                 extractedImages[fileNameWithoutExt] = dataUrl;
                             }
 
                             await saveImagesToIDB(extractedImages);
                             imageMap.value = extractedImages;
-
                             parseAndSaveWords(raw);
 
                         } else if (file.name.toLowerCase().endsWith('.json')) {
@@ -686,20 +784,13 @@
                             reader.readAsText(file);
                         }
                     } catch (err) {
-                        console.error(err);
                         alert(`❌ 파일을 처리하는 중 오류가 발생했습니다.\n\n오류 상세: ${err.message || err}`);
                     }
                     e.target.value = '';
                 };
 
                 const parseAndSaveWords = (raw) => {
-                    let list = [];
-                    if (Array.isArray(raw)) {
-                        list = raw;
-                    } else if (raw && typeof raw === 'object') {
-                        list = raw.words || raw.data || raw.items || raw.list || [];
-                    }
-
+                    let list = Array.isArray(raw) ? raw : (raw?.words || raw?.data || raw?.items || []);
                     if (!Array.isArray(list) || list.length === 0) {
                         alert('❌ 단어장에 유효한 단어 데이터가 없습니다.');
                         return;
@@ -721,24 +812,20 @@
                             return '';
                         };
 
-                        const engWord = getVal(['english', 'word', 'eng', 'vocab', 'vocabulary', 'target', 'title']) || 'No Word';
-                        const specifiedImg = getVal(['customimageurl', 'imageurl', 'image', 'img']);
-
                         return {
                             id: idx + 1,
                             week: parseInt(getVal(['week', 'w'])) || 1,
                             day: getVal(['day', 'd']) || 'Mon',
-                            english: engWord,
-                            meaning: getVal(['meaning', 'korean', 'kor', 'trans', 'translation', 'def', 'definition', 'mean', 'ko']) || '뜻 없음',
-                            example: getVal(['example', 'examplesentence', 'sentence', 'ex', 'sample']),
-                            exampleMeaning: getVal(['examplemeaning', 'sentencemeaning', 'examplekorean', 'examplekor', 'exmeaning']),
-                            imageFileName: specifiedImg || null
+                            english: getVal(['english', 'word', 'eng', 'vocab', 'target']) || 'No Word',
+                            meaning: getVal(['meaning', 'korean', 'kor', 'trans', 'def', 'mean']) || '뜻 없음',
+                            example: getVal(['example', 'examplesentence', 'sentence', 'ex']),
+                            exampleMeaning: getVal(['examplemeaning', 'sentencemeaning', 'examplekorean', 'exmeaning']),
+                            imageFileName: getVal(['customimageurl', 'imageurl', 'image', 'img']) || null
                         };
                     });
 
                     allWords.value = parsed;
                     learnedWordIDs.value = [];
-                    
                     const now = new Date();
                     const formattedDate = `${now.getFullYear()}.${String(now.getMonth()+1).padStart(2, '0')}.${String(now.getDate()).padStart(2, '0')} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
                     savedDate.value = formattedDate;
@@ -747,29 +834,16 @@
                         localStorage.setItem('vocab_all_words', JSON.stringify(parsed));
                         localStorage.setItem('vocab_learned_ids', JSON.stringify([]));
                         localStorage.setItem('vocab_saved_date', formattedDate);
-                    } catch (e) {
-                        console.warn('로컬스토리지 저장 한계:', e);
-                    }
+                    } catch (e) {}
 
                     alert(`✅ 총 ${parsed.length}개 단어가 저장되었습니다!`);
                 };
 
-                const availableWeeks = computed(() => {
-                    const weeks = [...new Set(allWords.value.map(w => w.week))];
-                    return weeks.sort((a, b) => a - b);
-                });
-
-                const getWords = (week, day) => {
-                    const isSat = (day === 'Sat');
-                    return allWords.value.filter(w => w.week === week && (isSat ? true : w.day === day));
-                };
-
+                const availableWeeks = computed(() => [...new Set(allWords.value.map(w => w.week))].sort((a, b) => a - b));
+                const getWords = (week, day) => allWords.value.filter(w => w.week === week && (day === 'Sat' ? true : w.day === day));
                 const isLearned = (word) => learnedWordIDs.value.includes(word.id);
-
                 const markAsLearned = (word) => {
-                    if (!isLearned(word)) {
-                        learnedWordIDs.value.push(word.id);
-                    }
+                    if (!isLearned(word)) learnedWordIDs.value.push(word.id);
                 };
 
                 const isWeekCompleted = (week) => {
@@ -779,13 +853,9 @@
 
                 const isWeekUnlocked = (week) => {
                     if (availableWeeks.value.length === 0) return true;
-                    const first = availableWeeks.value[0];
-                    if (week === first) return true;
+                    if (week === availableWeeks.value[0]) return true;
                     const idx = availableWeeks.value.indexOf(week);
-                    if (idx > 0) {
-                        return isWeekCompleted(availableWeeks.value[idx - 1]);
-                    }
-                    return false;
+                    return idx > 0 ? isWeekCompleted(availableWeeks.value[idx - 1]) : false;
                 };
 
                 const isDayDone = (week, day) => {
@@ -800,23 +870,15 @@
 
                     for (let i = 0; i < targetIdx; i++) {
                         const prevDayWords = getWords(week, days[i]);
-                        if (prevDayWords.length > 0 && !prevDayWords.every(w => isLearned(w))) {
-                            return false;
-                        }
+                        if (prevDayWords.length > 0 && !prevDayWords.every(w => isLearned(w))) return false;
                     }
                     return true;
                 };
 
-                const overallProgressRate = computed(() => {
-                    if (allWords.value.length === 0) return 0;
-                    return learnedWordIDs.value.length / allWords.value.length;
-                });
-
+                const overallProgressRate = computed(() => allWords.value.length === 0 ? 0 : learnedWordIDs.value.length / allWords.value.length);
                 const getWeekProgressRate = (week) => {
                     const words = allWords.value.filter(w => w.week === week);
-                    if (words.length === 0) return 0;
-                    const learned = words.filter(w => isLearned(w)).length;
-                    return learned / words.length;
+                    return words.length === 0 ? 0 : words.filter(w => isLearned(w)).length / words.length;
                 };
 
                 const todayLesson = computed(() => {
@@ -825,9 +887,7 @@
                             for (let d of days) {
                                 if (isDayUnlocked(w, d)) {
                                     const words = getWords(w, d);
-                                    if (words.length > 0 && !words.every(item => isLearned(item))) {
-                                        return { week: w, day: d };
-                                    }
+                                    if (words.length > 0 && !words.every(item => isLearned(item))) return { week: w, day: d };
                                 }
                             }
                         }
@@ -845,6 +905,8 @@
                 const currentWord = computed(() => currentWordList.value[currentIndex.value] || null);
                 const learnedInDayCount = computed(() => currentWordList.value.filter(w => isLearned(w)).length);
 
+                const currentStage3Item = computed(() => stage3List.value[stage3Index.value] || null);
+
                 const startLesson = (week, day) => {
                     currentWeek.value = week;
                     selectedDay.value = day;
@@ -858,6 +920,7 @@
                 };
 
                 const resetDayProgress = (forceStartOver = false) => {
+                    stage3Active.value = false;
                     const firstUnlearnedIdx = currentWordList.value.findIndex(w => !isLearned(w));
 
                     if (!forceStartOver && firstUnlearnedIdx !== -1) {
@@ -879,7 +942,6 @@
                     quizPart1Count.value = 0;
                     quizPart2Count.value = 0;
                     quizBlanks.value = [];
-
                     soundBlindFailCount.value = 0;
                     hintLevel.value = 0;
 
@@ -889,7 +951,9 @@
 
                 const focusInput = () => {
                     nextTick(() => {
-                        if (currentMode.value === 'practice' && practiceInput.value) {
+                        if (stage3Active.value && stage3InputRef.value) {
+                            stage3InputRef.value.focus();
+                        } else if (currentMode.value === 'practice' && practiceInput.value) {
                             practiceInput.value.focus();
                         } else if (currentMode.value === 'quiz' && quizInput.value) {
                             quizInput.value.focus();
@@ -897,32 +961,21 @@
                     });
                 };
 
-                const clearPracticeInput = () => {
-                    practiceText.value = '';
-                    focusInput();
-                };
-
-                const clearQuizInput = () => {
-                    quizText.value = '';
-                    focusInput();
-                };
+                const clearPracticeInput = () => { practiceText.value = ''; focusInput(); };
+                const clearQuizInput = () => { quizText.value = ''; focusInput(); };
 
                 const isCharCorrect = (char, idx) => {
                     if (!currentWord.value) return false;
-                    const target = currentWord.value.english;
-                    return idx < target.length && char.toLowerCase() === target[idx].toLowerCase();
+                    return idx < currentWord.value.english.length && char.toLowerCase() === currentWord.value.english[idx].toLowerCase();
                 };
 
-                // 1단계 타이핑 음향 효과 (실시간 정오답 피드백)
                 const onPracticeInput = (e) => {
                     if (!currentWord.value) return;
                     const val = practiceText.value;
                     const target = currentWord.value.english;
-
                     if (val.length > 0) {
-                        const lastChar = val[val.length - 1];
                         const lastIdx = val.length - 1;
-                        if (lastIdx < target.length && lastChar.toLowerCase() === target[lastIdx].toLowerCase()) {
+                        if (lastIdx < target.length && val[lastIdx].toLowerCase() === target[lastIdx].toLowerCase()) {
                             playTypingSound();
                         } else {
                             playErrorSound();
@@ -930,7 +983,6 @@
                     }
                 };
 
-                // 2단계 타이핑 음향 효과 (1부: 정오답 피드백, 2부: 단순 타이핑음)
                 const onQuizInput = (e) => {
                     if (!currentWord.value) return;
                     const val = quizText.value;
@@ -938,16 +990,13 @@
 
                     if (val.length > 0) {
                         if (quizSubStage.value === 1) {
-                            // 2단계 1부 (빈칸 채우기): 실시간 정오답 피드백
-                            const lastChar = val[val.length - 1];
                             const lastIdx = val.length - 1;
-                            if (lastIdx < target.length && lastChar.toLowerCase() === target[lastIdx].toLowerCase()) {
+                            if (lastIdx < target.length && val[lastIdx].toLowerCase() === target[lastIdx].toLowerCase()) {
                                 playTypingSound();
                             } else {
                                 playErrorSound();
                             }
                         } else {
-                            // 2단계 2부 (사운드 블라인드): 스포일러 방지용 단순 입력 소리만 재생
                             playTypingSound();
                         }
                     }
@@ -956,33 +1005,20 @@
                 const generateQuizBlanks = (attemptNumber) => {
                     if (!currentWord.value) return;
                     const len = currentWord.value.english.length;
-                    let blankCount = 1;
-
-                    if (len <= 3) {
-                        blankCount = 1;
-                    } else if (len <= 6) {
-                        blankCount = (attemptNumber === 1) ? 1 : 2;
-                    } else {
-                        blankCount = (attemptNumber === 1) ? 2 : 3;
-                    }
-
+                    let blankCount = len <= 3 ? 1 : (len <= 6 ? (attemptNumber === 1 ? 1 : 2) : (attemptNumber === 1 ? 2 : 3));
                     blankCount = Math.min(blankCount, len);
 
                     const indices = [];
                     while (indices.length < blankCount) {
                         const rand = Math.floor(Math.random() * len);
-                        if (!indices.includes(rand)) {
-                            indices.push(rand);
-                        }
+                        if (!indices.includes(rand)) indices.push(rand);
                     }
                     quizBlanks.value = indices;
                 };
 
                 const submitPractice = () => {
                     if (!currentWord.value) return;
-                    const target = currentWord.value.english;
-
-                    if (practiceText.value.trim().toLowerCase() === target.toLowerCase()) {
+                    if (practiceText.value.trim().toLowerCase() === currentWord.value.english.toLowerCase()) {
                         playCorrectSound();
                         practiceCount.value++;
                         practiceText.value = '';
@@ -999,21 +1035,13 @@
                             focusInput();
                         }
                     } else {
-                        // 1단계 오답 시: 경고음 + 입력창 자동 비우기
                         playErrorSound();
                         practiceText.value = '';
                     }
                 };
 
-                // 1차 힌트용 스펠링 가리기 (예: apple -> a _ _ _ _)
-                const getMaskedWord = (word) => {
-                    if (!word) return '';
-                    const first = word[0];
-                    const rest = ' _'.repeat(word.length - 1);
-                    return first + rest;
-                };
+                const getMaskedWord = (word) => word ? word[0] + ' _'.repeat(word.length - 1) : '';
 
-                // 힌트 버튼 클릭 핸들러
                 const triggerHint = () => {
                     if (hintLevel.value < 2) {
                         hintLevel.value++;
@@ -1029,7 +1057,6 @@
                         playCorrectSound();
                         quizText.value = '';
 
-                        // SUBSTAGE 1: Partial Blanks (3 Tries)
                         if (quizSubStage.value === 1) {
                             quizPart1Count.value++;
                             if (quizPart1Count.value >= 3) {
@@ -1042,67 +1069,208 @@
                                 generateQuizBlanks(quizPart1Count.value + 1);
                                 focusInput();
                             }
-                        } 
-                        // SUBSTAGE 2: Sound Blind (2 Tries)
-                        else if (quizSubStage.value === 2) {
-                            
-                            // 2차 힌트(전체 정답 따라쓰기) 상태였으면 입력 후 바로 완주
+                        } else if (quizSubStage.value === 2) {
                             if (hintLevel.value === 2) {
-                                markAsLearned(currentWord.value);
-                                practiceText.value = '';
-                                practiceCount.value = 0;
-                                quizSubStage.value = 1;
-                                quizPart1Count.value = 0;
-                                quizPart2Count.value = 0;
-                                soundBlindFailCount.value = 0;
-                                hintLevel.value = 0;
-                                currentMode.value = 'practice';
-
-                                if (currentIndex.value + 1 < currentWordList.value.length) {
-                                    currentIndex.value++;
-                                    focusInput();
-                                    speak(currentWord.value.english, 0.75);
-                                } else {
-                                    isDayCompleted.value = true;
-                                }
+                                moveToNextWordOrStage3();
                                 return;
                             }
 
-                            // 일반 정답 및 1차 힌트 확인 후 정답 성공 시
                             quizPart2Count.value++;
                             soundBlindFailCount.value = 0;
                             hintLevel.value = 0;
 
                             if (quizPart2Count.value >= 2) {
-                                markAsLearned(currentWord.value);
-                                practiceText.value = '';
-                                practiceCount.value = 0;
-                                quizSubStage.value = 1;
-                                quizPart1Count.value = 0;
-                                quizPart2Count.value = 0;
-                                soundBlindFailCount.value = 0;
-                                hintLevel.value = 0;
-                                currentMode.value = 'practice';
-
-                                if (currentIndex.value + 1 < currentWordList.value.length) {
-                                    currentIndex.value++;
-                                    focusInput();
-                                    speak(currentWord.value.english, 0.75);
-                                } else {
-                                    isDayCompleted.value = true;
-                                }
+                                moveToNextWordOrStage3();
                             } else {
                                 focusInput();
                                 speak(currentWord.value.english, 0.75);
                             }
                         }
                     } else {
-                        // 2단계 오답 시: 경고음 + 입력창 자동 비우기
                         playErrorSound();
-                        if (quizSubStage.value === 2) {
-                            soundBlindFailCount.value++;
-                        }
+                        if (quizSubStage.value === 2) soundBlindFailCount.value++;
                         quizText.value = '';
+                    }
+                };
+
+                const moveToNextWordOrStage3 = () => {
+                    practiceText.value = '';
+                    practiceCount.value = 0;
+                    quizSubStage.value = 1;
+                    quizPart1Count.value = 0;
+                    quizPart2Count.value = 0;
+                    soundBlindFailCount.value = 0;
+                    hintLevel.value = 0;
+                    currentMode.value = 'practice';
+
+                    if (currentIndex.value + 1 < currentWordList.value.length) {
+                        currentIndex.value++;
+                        focusInput();
+                        speak(currentWord.value.english, 0.75);
+                    } else {
+                        // All words cleared Stage 1 & 2 -> Start Stage 3!
+                        startStage3();
+                    }
+                };
+
+                // ================= STAGE 3 LOGIC =================
+                const generateMCQOptions = (targetWord) => {
+                    const options = [targetWord.english];
+                    const pool = currentWordList.value.filter(w => w.english.toLowerCase() !== targetWord.english.toLowerCase());
+                    const shuffledPool = [...pool].sort(() => 0.5 - Math.random());
+
+                    for (let i = 0; i < Math.min(2, shuffledPool.length); i++) {
+                        options.push(shuffledPool[i].english);
+                    }
+
+                    if (options.length < 3) {
+                        const globalPool = allWords.value.filter(w => !options.includes(w.english));
+                        const shuffledGlobal = [...globalPool].sort(() => 0.5 - Math.random());
+                        for (let i = 0; options.length < 3 && i < shuffledGlobal.length; i++) {
+                            options.push(shuffledGlobal[i].english);
+                        }
+                    }
+                    return options.sort(() => 0.5 - Math.random());
+                };
+
+                const startStage3 = () => {
+                    const shuffledWords = [...currentWordList.value].sort(() => 0.5 - Math.random());
+                    const types = ['pencil', 'typing', 'example'];
+
+                    stage3List.value = shuffledWords.map((w, idx) => {
+                        let selectedType = types[idx % 3];
+                        if (selectedType === 'example' && !w.example) {
+                            selectedType = (idx % 2 === 0) ? 'pencil' : 'typing';
+                        }
+                        return {
+                            word: w,
+                            type: selectedType,
+                            mcqOptions: selectedType === 'example' ? generateMCQOptions(w) : []
+                        };
+                    });
+
+                    stage3Index.value = 0;
+                    stage3Active.value = true;
+                    isDayCompleted.value = false;
+                    initStage3Question();
+                };
+
+                const initStage3Question = () => {
+                    stage3Text.value = '';
+                    stage3AnswerRevealed.value = false;
+
+                    nextTick(() => {
+                        if (currentStage3Item.value) {
+                            if (currentStage3Item.value.type === 'pencil') {
+                                initCanvas();
+                            } else if (currentStage3Item.value.type === 'typing') {
+                                focusInput();
+                            }
+                            speak(currentStage3Item.value.word.english, 0.75);
+                        }
+                    });
+                };
+
+                const nextStage3Question = () => {
+                    if (stage3Index.value + 1 < stage3List.value.length) {
+                        stage3Index.value++;
+                        initStage3Question();
+                    } else {
+                        // Stage 3 Clear!
+                        stage3Active.value = false;
+                        isDayCompleted.value = true;
+                        currentWordList.value.forEach(w => markAsLearned(w));
+                        playCorrectSound();
+                    }
+                };
+
+                // Canvas Event Handlers
+                const initCanvas = () => {
+                    nextTick(() => {
+                        if (!canvasRef.value) return;
+                        const canvas = canvasRef.value;
+                        const ctx = canvas.getContext('2d');
+                        const rect = canvas.getBoundingClientRect();
+                        canvas.width = rect.width;
+                        canvas.height = rect.height;
+                        ctx.lineWidth = 5;
+                        ctx.lineCap = 'round';
+                        ctx.lineJoin = 'round';
+                        ctx.strokeStyle = '#4338ca';
+                    });
+                };
+
+                const startDrawing = (e) => {
+                    isDrawing.value = true;
+                    const canvas = canvasRef.value;
+                    if (!canvas) return;
+                    canvas.setPointerCapture(e.pointerId);
+                    const ctx = canvas.getContext('2d');
+                    const rect = canvas.getBoundingClientRect();
+                    ctx.lineWidth = 5;
+                    ctx.lineCap = 'round';
+                    ctx.lineJoin = 'round';
+                    ctx.strokeStyle = '#4338ca';
+                    ctx.beginPath();
+                    ctx.moveTo(e.clientX - rect.left, e.clientY - rect.top);
+                };
+
+                const draw = (e) => {
+                    if (!isDrawing.value || !canvasRef.value) return;
+                    const canvas = canvasRef.value;
+                    const ctx = canvas.getContext('2d');
+                    const rect = canvas.getBoundingClientRect();
+                    ctx.lineTo(e.clientX - rect.left, e.clientY - rect.top);
+                    ctx.stroke();
+                };
+
+                const stopDrawing = (e) => {
+                    if (!isDrawing.value) return;
+                    isDrawing.value = false;
+                    if (canvasRef.value && e?.pointerId) {
+                        try { canvasRef.value.releasePointerCapture(e.pointerId); } catch(err){}
+                    }
+                };
+
+                const clearCanvas = () => {
+                    if (!canvasRef.value) return;
+                    const canvas = canvasRef.value;
+                    const ctx = canvas.getContext('2d');
+                    ctx.clearRect(0, 0, canvas.width, canvas.height);
+                    stage3AnswerRevealed.value = false;
+                };
+
+                const revealPencilAnswer = () => {
+                    stage3AnswerRevealed.value = true;
+                    speak(currentStage3Item.value.word.english, 0.75);
+                };
+
+                const submitStage3Typing = () => {
+                    if (!currentStage3Item.value) return;
+                    const target = currentStage3Item.value.word.english;
+
+                    if (stage3Text.value.trim().toLowerCase() === target.toLowerCase()) {
+                        playCorrectSound();
+                        nextStage3Question();
+                    } else {
+                        playErrorSound();
+                        stage3Text.value = '';
+                    }
+                };
+
+                const getMaskedExample = (word) => {
+                    if (!word || !word.example) return '';
+                    const regex = new RegExp(word.english, 'gi');
+                    return word.example.replace(regex, '_______');
+                };
+
+                const submitStage3MCQ = (selectedOpt) => {
+                    if (!currentStage3Item.value) return;
+                    if (selectedOpt.toLowerCase() === currentStage3Item.value.word.english.toLowerCase()) {
+                        playCorrectSound();
+                        nextStage3Question();
+                    } else {
+                        playErrorSound();
                     }
                 };
 
@@ -1128,7 +1296,6 @@
 
                 const getWordImage = (word) => {
                     if (!word) return '';
-
                     if (word.imageFileName) {
                         const lowerSpec = word.imageFileName.toLowerCase().trim();
                         const specWithoutPath = lowerSpec.split('/').pop();
@@ -1155,15 +1322,17 @@
                 return {
                     activeScreen, allWords, learnedWordIDs, savedDate, currentWeek, selectedDay, days,
                     currentIndex, currentMode, practiceText, practiceCount, quizText, isDayCompleted,
-                    quizSubStage, quizPart1Count, quizPart2Count, quizBlanks,
-                    soundBlindFailCount, hintLevel, getMaskedWord, triggerHint,
-                    practiceInput, quizInput, fileInput, showConfirmModal,
+                    quizSubStage, quizPart1Count, quizPart2Count, quizBlanks, soundBlindFailCount, hintLevel,
+                    stage3Active, stage3List, stage3Index, stage3Text, stage3AnswerRevealed, currentStage3Item,
+                    practiceInput, quizInput, stage3InputRef, canvasRef, fileInput, showConfirmModal,
                     openConfirmModal, confirmLoadFile, cancelLoadFile, handleFileUpload,
                     availableWeeks, getWords, isLearned, isWeekUnlocked, isWeekCompleted,
                     isDayUnlocked, isDayDone, overallProgressRate, getWeekProgressRate, todayLesson, getDayBtnClass,
                     currentWordList, currentWord, learnedInDayCount, startLesson, changeDay, resetDayProgress,
                     isCharCorrect, onPracticeInput, onQuizInput, submitPractice, submitQuiz, advanceToNextDay, resetProgress,
-                    clearPracticeInput, clearQuizInput, speak, getWordImage, handleImgError
+                    clearPracticeInput, clearQuizInput, speak, getWordImage, handleImgError,
+                    startStage3, startDrawing, draw, stopDrawing, clearCanvas, revealPencilAnswer,
+                    submitStage3Typing, getMaskedExample, submitStage3MCQ
                 };
             }
         }).mount('#app');
