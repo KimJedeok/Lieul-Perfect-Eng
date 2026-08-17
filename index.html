@@ -10,7 +10,7 @@
     <meta name="apple-mobile-web-app-title" content="리을의 영어정복">
     <link rel="apple-touch-icon" href="https://cdn-icons-png.flaticon.com/512/3898/3898082.png">
 
-    <!-- 새로 만든 필기 인식 전용 파일 (기존 script 위에 위치) -->
+    <!-- 필기 인식 전용 파일 -->
     <script src="pencil-ocr.js"></script>
     <!-- Tailwind CSS CDN -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -228,36 +228,6 @@
                     </div>
                 </div>
 
-                <!-- TYPE B: Speed Typing Challenge -->
-                <div v-else-if="currentStage3Item.type === 'typing'" class="space-y-4 my-auto">
-                    <div class="text-center space-y-1">
-                        <span class="text-xs font-bold text-amber-600 bg-amber-50 px-2.5 py-0.5 rounded-full border border-amber-200">⚡ 스피드 타자 미션</span>
-                        <h3 class="text-xl font-bold text-slate-800">단어를 빠르게 타이핑하세요!</h3>
-                    </div>
-
-                    <div class="bg-amber-50 border border-amber-200 p-5 rounded-2xl text-center space-y-3">
-                        <div class="text-2xl font-bold text-amber-900">'{{ currentStage3Item.word.meaning }}'</div>
-                        <button @click="speak(currentStage3Item.word.english, 0.75)" class="bg-amber-200 hover:bg-amber-300 text-amber-900 font-bold px-3.5 py-1.5 rounded-xl text-xs inline-flex items-center gap-1 shadow-sm transition">
-                            🔊 발음 듣기
-                        </button>
-                    </div>
-
-                    <div class="space-y-2 max-w-sm mx-auto">
-                        <input ref="stage3InputRef"
-                               v-model="stage3Text"
-                               @keyup.enter="submitStage3Typing"
-                               type="text"
-                               autocapitalize="off"
-                               autocorrect="off"
-                               spellcheck="false"
-                               placeholder="영어 단어 입력"
-                               class="w-full h-12 px-3.5 bg-white border-2 border-amber-400 rounded-xl font-bold text-xl text-center text-slate-900 focus:outline-none focus:border-amber-600 shadow-inner">
-                        <button @click="submitStage3Typing" class="w-full bg-amber-500 hover:bg-amber-600 text-slate-900 font-black py-3 rounded-xl shadow-md text-base transition">
-                            확인 제출
-                        </button>
-                    </div>
-                </div>
-
                 <!-- TYPE C: Easy Example Blank MCQ Challenge -->
                 <div v-else-if="currentStage3Item.type === 'example'" class="space-y-4 my-auto">
                     <div class="text-center space-y-1">
@@ -270,8 +240,10 @@
                         <div class="text-xl md:text-2xl font-black text-slate-900 leading-relaxed">
                             "{{ getMaskedExample(currentStage3Item.word) }}"
                         </div>
-                        <div v-if="currentStage3Item.word.exampleMeaning" class="text-sm font-semibold text-slate-600">
-                            ({{ currentStage3Item.word.exampleMeaning }})
+                        <!-- Korean Translation with Highlighted Target Word -->
+                        <div v-if="currentStage3Item.word.exampleMeaning"
+                             class="text-sm font-semibold text-slate-600"
+                             v-html="'(' + getHighlightedExampleMeaning(currentStage3Item.word) + ')'">
                         </div>
                         <button @click="speak(currentStage3Item.word.example, 0.65)" class="text-xs font-bold text-emerald-700 bg-emerald-100 hover:bg-emerald-200 px-3 py-1 rounded-lg border border-emerald-300 transition">
                             🔊 예문 전체 듣기
@@ -671,19 +643,17 @@
                 const stage3Active = ref(false);
                 const stage3List = ref([]);
                 const stage3Index = ref(0);
-                const stage3Text = ref('');
                 const stage3AnswerRevealed = ref(false);
 
                 // Refs
                 const practiceInput = ref(null);
                 const quizInput = ref(null);
-                const stage3InputRef = ref(null);
                 const canvasRef = ref(null);
                 const fileInput = ref(null);
 
                 const showConfirmModal = ref(false);
 
-                // 캔버스 해상도 1:1 동기화 함수 (확대 현상 해결)
+                // 캔버스 해상도 1:1 동기화 함수
                 const resizeCanvas = () => {
                     const canvas = document.getElementById('pencilCanvas');
                     if (canvas && canvas.parentElement) {
@@ -967,9 +937,7 @@
 
                 const focusInput = () => {
                     nextTick(() => {
-                        if (stage3Active.value && stage3InputRef.value) {
-                            stage3InputRef.value.focus();
-                        } else if (currentMode.value === 'practice' && practiceInput.value) {
+                        if (currentMode.value === 'practice' && practiceInput.value) {
                             practiceInput.value.focus();
                         } else if (currentMode.value === 'quiz' && quizInput.value) {
                             quizInput.value.focus();
@@ -1148,22 +1116,28 @@
                     return options.sort(() => 0.5 - Math.random());
                 };
 
+                // 3단계: 5개 단어 전수 무작위 출제 개편
                 const startStage3 = () => {
-                    const shuffledWords = [...currentWordList.value].sort(() => 0.5 - Math.random());
-                    const types = ['pencil', 'typing', 'example'];
-
-                    stage3List.value = shuffledWords.map((w, idx) => {
-                        let selectedType = types[idx % 3];
-                        if (selectedType === 'example' && !w.example) {
-                            selectedType = (idx % 2 === 0) ? 'pencil' : 'typing';
-                        }
-                        return {
-                            word: w,
-                            type: selectedType,
-                            mcqOptions: selectedType === 'example' ? generateMCQOptions(w) : []
-                        };
+                    const list = [];
+                    
+                    // 1. 그날 배운 5개 단어 전체 무작위 펜슬 쓰기 테스트
+                    const shuffledPencil = [...currentWordList.value].sort(() => 0.5 - Math.random());
+                    shuffledPencil.forEach(w => {
+                        list.push({ word: w, type: 'pencil' });
                     });
 
+                    // 2. 예문이 존재하는 당일 단어 전체 무작위 예문 빈칸 MCQ 테스트
+                    const exampleWords = currentWordList.value.filter(w => w.example);
+                    const shuffledExample = [...exampleWords].sort(() => 0.5 - Math.random());
+                    shuffledExample.forEach(w => {
+                        list.push({
+                            word: w,
+                            type: 'example',
+                            mcqOptions: generateMCQOptions(w)
+                        });
+                    });
+
+                    stage3List.value = list;
                     stage3Index.value = 0;
                     stage3Active.value = true;
                     isDayCompleted.value = false;
@@ -1171,19 +1145,16 @@
                 };
 
                 const initStage3Question = () => {
-                    stage3Text.value = '';
                     stage3AnswerRevealed.value = false;
 
                     nextTick(() => {
                         if (currentStage3Item.value) {
                             if (currentStage3Item.value.type === 'pencil') {
-                                resizeCanvas(); // 캔버스 실제 크기 동기화
+                                resizeCanvas();
                                 clearCanvas();
                                 if (typeof initPencilCanvas === 'function') {
                                     initPencilCanvas('pencilCanvas');
                                 }
-                            } else if (currentStage3Item.value.type === 'typing') {
-                                focusInput();
                             }
                             speak(currentStage3Item.value.word.english, 0.75);
                         }
@@ -1202,9 +1173,9 @@
                     }
                 };
 
-                // Canvas & Pencil API Handlers
+                // Canvas & Pencil Handlers
                 const clearCanvas = () => {
-                    resizeCanvas(); // 지울 때 해상도 재생성
+                    resizeCanvas();
                     if (typeof clearPencilCanvas === 'function') {
                         clearPencilCanvas('pencilCanvas');
                     } else if (canvasRef.value) {
@@ -1213,6 +1184,14 @@
                     }
                     stage3AnswerRevealed.value = false;
                 };
+
+                const praiseList = [
+                    "🎉 완벽해요! 정답입니다!",
+                    "✨ 참 잘했어요! 글씨가 아주 훌륭해요!",
+                    "👍 멋져요! 단어를 정확하게 기억하고 계시네요!",
+                    "💯 최고입니다! 이 기세로 계속 도전해봐요!",
+                    "🌟 대단해요! 완벽하게 잘 쓰셨어요!"
+                ];
 
                 const revealPencilAnswer = async () => {
                     if (!currentStage3Item.value) return;
@@ -1233,6 +1212,8 @@
 
                         if (result.isCorrect) {
                             playCorrectSound();
+                            const randomPraise = praiseList[Math.floor(Math.random() * praiseList.length)];
+                            alert(randomPraise);
                             nextStage3Question();
                         } else {
                             playErrorSound();
@@ -1246,23 +1227,27 @@
                     }
                 };
 
-                const submitStage3Typing = () => {
-                    if (!currentStage3Item.value) return;
-                    const target = currentStage3Item.value.word.english;
-
-                    if (stage3Text.value.trim().toLowerCase() === target.toLowerCase()) {
-                        playCorrectSound();
-                        nextStage3Question();
-                    } else {
-                        playErrorSound();
-                        stage3Text.value = '';
-                    }
-                };
-
                 const getMaskedExample = (word) => {
                     if (!word || !word.example) return '';
                     const regex = new RegExp(word.english, 'gi');
                     return word.example.replace(regex, '_______');
+                };
+
+                // 한국어 해석 내 단어 뜻 폰트 색상 강조 함수
+                const getHighlightedExampleMeaning = (word) => {
+                    if (!word || !word.exampleMeaning) return '';
+                    let text = word.exampleMeaning;
+                    if (!word.meaning) return text;
+
+                    // 쉼표나 슬래시로 다중 뜻이 있는 경우 분리하여 처리
+                    const meanings = word.meaning.split(/[,/]/).map(m => m.trim()).filter(m => m.length > 0);
+                    meanings.forEach(m => {
+                        if (m && text.includes(m)) {
+                            const regex = new RegExp(m, 'g');
+                            text = text.replace(regex, `<span class="text-rose-600 font-extrabold underline decoration-rose-300 decoration-2 underline-offset-2">${m}</span>`);
+                        }
+                    });
+                    return text;
                 };
 
                 const submitStage3MCQ = (selectedOpt) => {
@@ -1324,8 +1309,8 @@
                     activeScreen, allWords, learnedWordIDs, savedDate, currentWeek, selectedDay, days,
                     currentIndex, currentMode, practiceText, practiceCount, quizText, isDayCompleted,
                     quizSubStage, quizPart1Count, quizPart2Count, quizBlanks, soundBlindFailCount, hintLevel,
-                    stage3Active, stage3List, stage3Index, stage3Text, stage3AnswerRevealed, currentStage3Item,
-                    practiceInput, quizInput, stage3InputRef, canvasRef, fileInput, showConfirmModal,
+                    stage3Active, stage3List, stage3Index, stage3AnswerRevealed, currentStage3Item,
+                    practiceInput, quizInput, canvasRef, fileInput, showConfirmModal,
                     openConfirmModal, confirmLoadFile, cancelLoadFile, handleFileUpload,
                     availableWeeks, getWords, isLearned, isWeekUnlocked, isWeekCompleted,
                     isDayUnlocked, isDayDone, overallProgressRate, getWeekProgressRate, todayLesson, getDayBtnClass,
@@ -1333,7 +1318,7 @@
                     isCharCorrect, onPracticeInput, onQuizInput, submitPractice, submitQuiz, advanceToNextDay, resetProgress,
                     clearPracticeInput, clearQuizInput, speak, getWordImage, handleImgError,
                     startStage3, clearCanvas, revealPencilAnswer,
-                    submitStage3Typing, getMaskedExample, submitStage3MCQ, nextStage3Question
+                    getMaskedExample, getHighlightedExampleMeaning, submitStage3MCQ, nextStage3Question
                 };
             }
         }).mount('#app');
