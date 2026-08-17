@@ -171,7 +171,7 @@
                     </div>
                 </div>
                 <div class="flex gap-3">
-                    <button @click="resetDayProgress" class="flex-1 bg-slate-100 hover:bg-slate-200 font-bold py-2.5 rounded-xl text-sm">다시 학습하기</button>
+                    <button @click="resetDayProgress(true)" class="flex-1 bg-slate-100 hover:bg-slate-200 font-bold py-2.5 rounded-xl text-sm">다시 학습하기</button>
                     <button @click="advanceToNextDay" class="flex-1 bg-rose-500 hover:bg-rose-600 text-white font-bold py-2.5 rounded-xl shadow-md text-sm">다음 학습으로 →</button>
                 </div>
             </div>
@@ -220,7 +220,7 @@
                                     <div class="text-xl md:text-2xl font-bold text-rose-500">{{ currentWord.meaning }}</div>
                                 </div>
 
-                                <!-- Example Sentence (확대된 폰트 및 슬로우 TTS) -->
+                                <!-- Example Sentence -->
                                 <div v-if="currentWord.example" class="bg-white border border-slate-200 p-3 rounded-2xl text-left space-y-1.5 shadow-sm">
                                     <div class="flex justify-between items-center">
                                         <span class="text-xs md:text-sm font-bold text-slate-500">💬 오늘의 예문</span>
@@ -441,7 +441,6 @@
                 };
                 const playErrorSound = () => playSound(180, 'sawtooth', 0.2);
 
-                // 속도 조절 가능하게 수정한 TTS (기본값 0.7: 천천히 읽기)
                 const speak = (text, rate = 0.7) => {
                     if ('speechSynthesis' in window) {
                         window.speechSynthesis.cancel();
@@ -771,15 +770,28 @@
                     resetDayProgress();
                 };
 
-                const resetDayProgress = () => {
-                    currentIndex.value = 0;
+                // [수정된 부분] 미완료된 첫 단어부터 탐색하여 위치 설정
+                const resetDayProgress = (forceStartOver = false) => {
+                    const firstUnlearnedIdx = currentWordList.value.findIndex(w => !isLearned(w));
+
+                    if (!forceStartOver && firstUnlearnedIdx !== -1) {
+                        currentIndex.value = firstUnlearnedIdx;
+                        isDayCompleted.value = false;
+                    } else if (!forceStartOver && firstUnlearnedIdx === -1) {
+                        currentIndex.value = 0;
+                        isDayCompleted.value = currentWordList.value.length > 0;
+                    } else {
+                        // '다시 학습하기' 버튼을 누른 경우
+                        currentIndex.value = 0;
+                        isDayCompleted.value = false;
+                    }
+
                     currentMode.value = 'practice';
                     practiceText.value = '';
                     practiceCount.value = 0;
                     quizText.value = '';
-                    isDayCompleted.value = false;
                     focusInput();
-                    if (currentWord.value) speak(currentWord.value.english, 0.75);
+                    if (!isDayCompleted.value && currentWord.value) speak(currentWord.value.english, 0.75);
                 };
 
                 const focusInput = () => {
