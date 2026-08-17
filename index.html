@@ -205,7 +205,7 @@
                             </span>
                         </div>
 
-                        <button @click="clearCanvas" class="absolute top-2 right-2 bg-white/80 hover:bg-white text-slate-700 text-xs font-bold px-2.5 py-1.5 rounded-lg border border-slate-200 shadow-sm z-20">
+                        <button @click="clearCanvasStrokesOnly" class="absolute top-2 right-2 bg-white/80 hover:bg-white text-slate-700 text-xs font-bold px-2.5 py-1.5 rounded-lg border border-slate-200 shadow-sm z-20">
                             🧹 싹 지우기
                         </button>
                     </div>
@@ -217,11 +217,14 @@
                                 🔍 정답 확인하기
                             </button>
                         </div>
-                        <div v-else class="flex gap-2">
-                            <button @click="clearCanvas" class="flex-1 bg-slate-200 hover:bg-slate-300 text-slate-800 font-bold py-3 rounded-xl text-sm transition">
-                                🔄 다시 쓰기
+                        <div v-else class="flex flex-wrap sm:flex-nowrap gap-2">
+                            <button @click="clearCanvasStrokesOnly" class="flex-1 bg-slate-200 hover:bg-slate-300 text-slate-800 font-bold py-3 px-3 rounded-xl text-sm transition">
+                                🧹 지우기
                             </button>
-                            <button @click="nextStage3Question" class="flex-1 bg-emerald-500 hover:bg-emerald-600 text-white font-bold py-3 rounded-xl shadow-md text-sm transition">
+                            <button @click="revealPencilAnswer" class="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 px-3 rounded-xl shadow-md text-sm transition">
+                                🔍 정답 다시 확인
+                            </button>
+                            <button @click="nextStage3Question" class="flex-1 bg-emerald-500 hover:bg-emerald-600 text-white font-bold py-3 px-3 rounded-xl shadow-md text-sm transition">
                                 다음으로 →
                             </button>
                         </div>
@@ -245,8 +248,8 @@
                              class="text-sm font-semibold text-slate-600"
                              v-html="'(' + getHighlightedExampleMeaning(currentStage3Item.word) + ')'">
                         </div>
-                        <button @click="speak(currentStage3Item.word.example, 0.65)" class="text-xs font-bold text-emerald-700 bg-emerald-100 hover:bg-emerald-200 px-3 py-1 rounded-lg border border-emerald-300 transition">
-                            🔊 예문 전체 듣기
+                        <button @click="speakSequence(currentStage3Item.word.english, currentStage3Item.word.example)" class="text-xs font-bold text-emerald-700 bg-emerald-100 hover:bg-emerald-200 px-3 py-1 rounded-lg border border-emerald-300 transition">
+                            🔊 단어 & 예문 전체 듣기
                         </button>
                     </div>
 
@@ -596,6 +599,12 @@
                 };
                 const playErrorSound = () => playSound(180, 'sawtooth', 0.2);
 
+                // 단어와 예문 사이를 자연스럽게 구분해주는 부드러운 2음계 챠임벨 음향
+                const playChimeSound = () => {
+                    playSound(587.33, 'sine', 0.08); // D5
+                    setTimeout(() => playSound(880, 'sine', 0.12), 80); // A5
+                };
+
                 let speechTimer = null;
                 const speak = (text, rate = 0.7, delay = 400) => {
                     if ('speechSynthesis' in window) {
@@ -610,6 +619,29 @@
                             window.speechSynthesis.speak(utterance);
                         }, delay);
                     }
+                };
+
+                // 단어 발음 -> 부드러운 알림음 -> 예문 연속 순차 재생 함수
+                const speakSequence = (wordText, sentenceText) => {
+                    if (!('speechSynthesis' in window)) return;
+                    window.speechSynthesis.cancel();
+                    if (speechTimer) clearTimeout(speechTimer);
+
+                    const u1 = new SpeechSynthesisUtterance(wordText);
+                    u1.lang = 'en-US';
+                    u1.rate = 0.75;
+
+                    u1.onend = () => {
+                        playChimeSound();
+                        speechTimer = setTimeout(() => {
+                            const u2 = new SpeechSynthesisUtterance(sentenceText);
+                            u2.lang = 'en-US';
+                            u2.rate = 0.65;
+                            window.speechSynthesis.speak(u2);
+                        }, 400);
+                    };
+
+                    window.speechSynthesis.speak(u1);
                 };
 
                 // Base State
@@ -1116,17 +1148,14 @@
                     return options.sort(() => 0.5 - Math.random());
                 };
 
-                // 3단계: 5개 단어 전수 무작위 출제 개편
                 const startStage3 = () => {
                     const list = [];
                     
-                    // 1. 그날 배운 5개 단어 전체 무작위 펜슬 쓰기 테스트
                     const shuffledPencil = [...currentWordList.value].sort(() => 0.5 - Math.random());
                     shuffledPencil.forEach(w => {
                         list.push({ word: w, type: 'pencil' });
                     });
 
-                    // 2. 예문이 존재하는 당일 단어 전체 무작위 예문 빈칸 MCQ 테스트
                     const exampleWords = currentWordList.value.filter(w => w.example);
                     const shuffledExample = [...exampleWords].sort(() => 0.5 - Math.random());
                     shuffledExample.forEach(w => {
@@ -1155,8 +1184,10 @@
                                 if (typeof initPencilCanvas === 'function') {
                                     initPencilCanvas('pencilCanvas');
                                 }
+                                speak(currentStage3Item.value.word.english, 0.75);
+                            } else if (currentStage3Item.value.type === 'example') {
+                                speakSequence(currentStage3Item.value.word.english, currentStage3Item.value.word.example);
                             }
-                            speak(currentStage3Item.value.word.english, 0.75);
                         }
                     });
                 };
@@ -1173,8 +1204,8 @@
                     }
                 };
 
-                // Canvas & Pencil Handlers
-                const clearCanvas = () => {
+                // 순수 필기 선만 지우기 (정답 상태는 유지)
+                const clearCanvasStrokesOnly = () => {
                     resizeCanvas();
                     if (typeof clearPencilCanvas === 'function') {
                         clearPencilCanvas('pencilCanvas');
@@ -1182,6 +1213,11 @@
                         const ctx = canvasRef.value.getContext('2d');
                         ctx.clearRect(0, 0, canvasRef.value.width, canvasRef.value.height);
                     }
+                };
+
+                // 필기 선 지우기 + 정답 공개 여부 초기화
+                const clearCanvas = () => {
+                    clearCanvasStrokesOnly();
                     stage3AnswerRevealed.value = false;
                 };
 
@@ -1220,6 +1256,7 @@
                             stage3AnswerRevealed.value = true;
                             speak(targetWord, 0.75);
                             alert(`아쉬워요! AI가 '${result.recognizedText}'(으)로 읽었어요. 정답을 확인하고 다시 써볼까요?`);
+                            clearCanvasStrokesOnly(); // 팝업이 닫힌 뒤 필기 선만 깔끔하게 지워줌
                         }
                     } else {
                         stage3AnswerRevealed.value = true;
@@ -1233,13 +1270,11 @@
                     return word.example.replace(regex, '_______');
                 };
 
-                // 한국어 해석 내 단어 뜻 폰트 색상 강조 함수
                 const getHighlightedExampleMeaning = (word) => {
                     if (!word || !word.exampleMeaning) return '';
                     let text = word.exampleMeaning;
                     if (!word.meaning) return text;
 
-                    // 쉼표나 슬래시로 다중 뜻이 있는 경우 분리하여 처리
                     const meanings = word.meaning.split(/[,/]/).map(m => m.trim()).filter(m => m.length > 0);
                     meanings.forEach(m => {
                         if (m && text.includes(m)) {
@@ -1316,8 +1351,8 @@
                     isDayUnlocked, isDayDone, overallProgressRate, getWeekProgressRate, todayLesson, getDayBtnClass,
                     currentWordList, currentWord, learnedInDayCount, startLesson, changeDay, resetDayProgress,
                     isCharCorrect, onPracticeInput, onQuizInput, submitPractice, submitQuiz, advanceToNextDay, resetProgress,
-                    clearPracticeInput, clearQuizInput, speak, getWordImage, handleImgError,
-                    startStage3, clearCanvas, revealPencilAnswer,
+                    clearPracticeInput, clearQuizInput, speak, speakSequence, getWordImage, handleImgError,
+                    startStage3, clearCanvas, clearCanvasStrokesOnly, revealPencilAnswer,
                     getMaskedExample, getHighlightedExampleMeaning, submitStage3MCQ, nextStage3Question
                 };
             }
