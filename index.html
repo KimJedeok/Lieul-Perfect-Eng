@@ -10,6 +10,8 @@
     <meta name="apple-mobile-web-app-title" content="리을의 영어정복">
     <link rel="apple-touch-icon" href="https://cdn-icons-png.flaticon.com/512/3898/3898082.png">
 
+    <!-- 새로 만든 필기 인식 전용 파일 (기존 script 위에 위치) -->
+    <script src="pencil-ocr.js"></script>
     <!-- Tailwind CSS CDN -->
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- Vue 3 CDN -->
@@ -192,11 +194,8 @@
 
                     <!-- Canvas Container -->
                     <div class="relative flex-1 min-h-[200px] border-2 border-indigo-200 rounded-2xl bg-indigo-50/30 overflow-hidden flex items-center justify-center">
-                        <canvas ref="canvasRef"
-                                @pointerdown="startDrawing"
-                                @pointermove="draw"
-                                @pointerup="stopDrawing"
-                                @pointercancel="stopDrawing"
+                        <canvas id="pencilCanvas"
+                                ref="canvasRef"
                                 class="absolute inset-0 w-full h-full touch-none cursor-crosshair z-10"></canvas>
                         
                         <!-- Overlay Guide Lines / Answer -->
@@ -223,7 +222,7 @@
                                 🔄 다시 쓰기
                             </button>
                             <button @click="nextStage3Question" class="flex-1 bg-emerald-500 hover:bg-emerald-600 text-white font-bold py-3 rounded-xl shadow-md text-sm transition">
-                                맞았어요! 다음으로 →
+                                다음으로 →
                             </button>
                         </div>
                     </div>
@@ -674,7 +673,6 @@
                 const stage3Index = ref(0);
                 const stage3Text = ref('');
                 const stage3AnswerRevealed = ref(false);
-                const isDrawing = ref(false);
 
                 // Refs
                 const practiceInput = ref(null);
@@ -1162,7 +1160,10 @@
                     nextTick(() => {
                         if (currentStage3Item.value) {
                             if (currentStage3Item.value.type === 'pencil') {
-                                initCanvas();
+                                clearCanvas();
+                                if (typeof initPencilCanvas === 'function') {
+                                    initPencilCanvas('pencilCanvas');
+                                }
                             } else if (currentStage3Item.value.type === 'typing') {
                                 focusInput();
                             }
@@ -1184,65 +1185,50 @@
                     }
                 };
 
-                // Canvas Event Handlers
-                const initCanvas = () => {
-                    nextTick(() => {
-                        if (!canvasRef.value) return;
-                        const canvas = canvasRef.value;
-                        const ctx = canvas.getContext('2d');
-                        const rect = canvas.getBoundingClientRect();
-                        canvas.width = rect.width;
-                        canvas.height = rect.height;
-                        ctx.lineWidth = 5;
-                        ctx.lineCap = 'round';
-                        ctx.lineJoin = 'round';
-                        ctx.strokeStyle = '#4338ca';
-                    });
-                };
-
-                const startDrawing = (e) => {
-                    isDrawing.value = true;
-                    const canvas = canvasRef.value;
-                    if (!canvas) return;
-                    canvas.setPointerCapture(e.pointerId);
-                    const ctx = canvas.getContext('2d');
-                    const rect = canvas.getBoundingClientRect();
-                    ctx.lineWidth = 5;
-                    ctx.lineCap = 'round';
-                    ctx.lineJoin = 'round';
-                    ctx.strokeStyle = '#4338ca';
-                    ctx.beginPath();
-                    ctx.moveTo(e.clientX - rect.left, e.clientY - rect.top);
-                };
-
-                const draw = (e) => {
-                    if (!isDrawing.value || !canvasRef.value) return;
-                    const canvas = canvasRef.value;
-                    const ctx = canvas.getContext('2d');
-                    const rect = canvas.getBoundingClientRect();
-                    ctx.lineTo(e.clientX - rect.left, e.clientY - rect.top);
-                    ctx.stroke();
-                };
-
-                const stopDrawing = (e) => {
-                    if (!isDrawing.value) return;
-                    isDrawing.value = false;
-                    if (canvasRef.value && e?.pointerId) {
-                        try { canvasRef.value.releasePointerCapture(e.pointerId); } catch(err){}
-                    }
-                };
-
+                // Canvas & Pencil API Handlers
                 const clearCanvas = () => {
-                    if (!canvasRef.value) return;
-                    const canvas = canvasRef.value;
-                    const ctx = canvas.getContext('2d');
-                    ctx.clearRect(0, 0, canvas.width, canvas.height);
+                    if (typeof clearPencilCanvas === 'function') {
+                        clearPencilCanvas('pencilCanvas');
+                    } else if (canvasRef.value) {
+                        const ctx = canvasRef.value.getContext('2d');
+                        ctx.clearRect(0, 0, canvasRef.value.width, canvasRef.value.height);
+                    }
                     stage3AnswerRevealed.value = false;
                 };
 
-                const revealPencilAnswer = () => {
-                    stage3AnswerRevealed.value = true;
-                    speak(currentStage3Item.value.word.english, 0.75);
+                const revealPencilAnswer = async () => {
+                    if (!currentStage3Item.value) return;
+                    const targetWord = currentStage3Item.value.word.english;
+
+                    // pencil-ocr.js API 호출
+                    if (typeof checkPencilAnswer === 'function') {
+                        const result = await checkPencilAnswer(targetWord, 'pencilCanvas');
+
+                        if (!result.success) {
+                            if (result.reason === 'EMPTY') {
+                                alert("글씨를 먼저 써주세요!");
+                                return;
+                            }
+                            // API 통신 실패 시 기본 오버레이 모드로 가이드 제공
+                            stage3AnswerRevealed.value = true;
+                            speak(targetWord, 0.75);
+                            return;
+                        }
+
+                        if (result.isCorrect) {
+                            playCorrectSound();
+                            nextStage3Question();
+                        } else {
+                            playErrorSound();
+                            stage3AnswerRevealed.value = true;
+                            speak(targetWord, 0.75);
+                            alert(`아쉬워요! AI가 '${result.recognizedText}'(으)로 읽었어요. 정답을 확인하고 다시 써볼까요?`);
+                        }
+                    } else {
+                        // pencil-ocr.js 로드 실패 대비 예외 처리
+                        stage3AnswerRevealed.value = true;
+                        speak(targetWord, 0.75);
+                    }
                 };
 
                 const submitStage3Typing = () => {
@@ -1331,8 +1317,8 @@
                     currentWordList, currentWord, learnedInDayCount, startLesson, changeDay, resetDayProgress,
                     isCharCorrect, onPracticeInput, onQuizInput, submitPractice, submitQuiz, advanceToNextDay, resetProgress,
                     clearPracticeInput, clearQuizInput, speak, getWordImage, handleImgError,
-                    startStage3, startDrawing, draw, stopDrawing, clearCanvas, revealPencilAnswer,
-                    submitStage3Typing, getMaskedExample, submitStage3MCQ
+                    startStage3, clearCanvas, revealPencilAnswer,
+                    submitStage3Typing, getMaskedExample, submitStage3MCQ, nextStage3Question
                 };
             }
         }).mount('#app');
