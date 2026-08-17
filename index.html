@@ -193,7 +193,7 @@
                     </div>
 
                     <!-- Canvas Container -->
-                    <div class="relative flex-1 min-h-[200px] border-2 border-indigo-200 rounded-2xl bg-indigo-50/30 overflow-hidden flex items-center justify-center">
+                    <div class="relative flex-1 min-h-[220px] border-2 border-indigo-200 rounded-2xl bg-indigo-50/30 overflow-hidden flex items-center justify-center">
                         <canvas id="pencilCanvas"
                                 ref="canvasRef"
                                 class="absolute inset-0 w-full h-full touch-none cursor-crosshair z-10"></canvas>
@@ -683,6 +683,18 @@
 
                 const showConfirmModal = ref(false);
 
+                // 캔버스 해상도 1:1 동기화 함수 (확대 현상 해결)
+                const resizeCanvas = () => {
+                    const canvas = document.getElementById('pencilCanvas');
+                    if (canvas && canvas.parentElement) {
+                        const rect = canvas.parentElement.getBoundingClientRect();
+                        if (rect.width > 0 && rect.height > 0) {
+                            canvas.width = Math.floor(rect.width);
+                            canvas.height = Math.floor(rect.height);
+                        }
+                    }
+                };
+
                 onMounted(async () => {
                     try {
                         const savedWords = localStorage.getItem('vocab_all_words');
@@ -697,6 +709,12 @@
                     } catch (e) {
                         console.error('데이터 로드 오류:', e);
                     }
+
+                    window.addEventListener('resize', () => {
+                        if (stage3Active.value && currentStage3Item.value?.type === 'pencil') {
+                            resizeCanvas();
+                        }
+                    });
                 });
 
                 watch(learnedWordIDs, (newVal) => {
@@ -1106,7 +1124,6 @@
                         focusInput();
                         speak(currentWord.value.english, 0.75);
                     } else {
-                        // All words cleared Stage 1 & 2 -> Start Stage 3!
                         startStage3();
                     }
                 };
@@ -1160,6 +1177,7 @@
                     nextTick(() => {
                         if (currentStage3Item.value) {
                             if (currentStage3Item.value.type === 'pencil') {
+                                resizeCanvas(); // 캔버스 실제 크기 동기화
                                 clearCanvas();
                                 if (typeof initPencilCanvas === 'function') {
                                     initPencilCanvas('pencilCanvas');
@@ -1177,7 +1195,6 @@
                         stage3Index.value++;
                         initStage3Question();
                     } else {
-                        // Stage 3 Clear!
                         stage3Active.value = false;
                         isDayCompleted.value = true;
                         currentWordList.value.forEach(w => markAsLearned(w));
@@ -1187,6 +1204,7 @@
 
                 // Canvas & Pencil API Handlers
                 const clearCanvas = () => {
+                    resizeCanvas(); // 지울 때 해상도 재생성
                     if (typeof clearPencilCanvas === 'function') {
                         clearPencilCanvas('pencilCanvas');
                     } else if (canvasRef.value) {
@@ -1200,7 +1218,6 @@
                     if (!currentStage3Item.value) return;
                     const targetWord = currentStage3Item.value.word.english;
 
-                    // pencil-ocr.js API 호출
                     if (typeof checkPencilAnswer === 'function') {
                         const result = await checkPencilAnswer(targetWord, 'pencilCanvas');
 
@@ -1209,7 +1226,6 @@
                                 alert("글씨를 먼저 써주세요!");
                                 return;
                             }
-                            // API 통신 실패 시 기본 오버레이 모드로 가이드 제공
                             stage3AnswerRevealed.value = true;
                             speak(targetWord, 0.75);
                             return;
@@ -1225,7 +1241,6 @@
                             alert(`아쉬워요! AI가 '${result.recognizedText}'(으)로 읽었어요. 정답을 확인하고 다시 써볼까요?`);
                         }
                     } else {
-                        // pencil-ocr.js 로드 실패 대비 예외 처리
                         stage3AnswerRevealed.value = true;
                         speak(targetWord, 0.75);
                     }
