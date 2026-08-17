@@ -280,31 +280,31 @@
                         </div>
                     </div>
 
-                    <!-- STAGE 2: Spelling Quiz -->
+                    <!-- STAGE 2: Advanced Spelling Test (Part 1: Blanks / Part 2: Sound Blind) -->
                     <div v-else class="space-y-3.5">
                         <div class="text-center bg-purple-100 text-purple-700 py-1.5 px-4 rounded-full text-sm font-bold w-fit mx-auto">
-                            2단계: 스펠링 테스트 🎯
+                            2단계: {{ quizSubStage === 1 ? '빈칸 채우기 테스트 🧩 (1/2)' : '사운드 블라인드 테스트 🎧 (2/2)' }}
                         </div>
 
-                        <div class="grid grid-cols-1 md:grid-cols-2 gap-3.5 items-center">
+                        <!-- SUBSTAGE 1: Partial Blanks (3 Tries) -->
+                        <div v-if="quizSubStage === 1" class="grid grid-cols-1 md:grid-cols-2 gap-3.5 items-center">
                             <!-- Image Display (Left) -->
                             <div class="w-full h-36 md:h-44 bg-slate-50 rounded-2xl overflow-hidden flex items-center justify-center border border-slate-100">
                                 <img :src="getWordImage(currentWord)" class="max-h-full object-contain" @error="handleImgError">
                             </div>
 
                             <!-- Quiz Content (Right) -->
-                            <div class="space-y-3.5">
+                            <div class="space-y-3">
                                 <div class="text-center text-xl md:text-2xl font-bold text-slate-800">
-                                    '{{ currentWord.meaning }}' 의 영단어는?
+                                    '{{ currentWord.meaning }}'
                                 </div>
 
-                                <!-- Realtime Chars -->
-                                <div class="flex justify-center gap-1.5 min-h-[42px] items-center overflow-x-auto py-0.5">
-                                    <span v-if="quizText.length === 0" class="text-sm font-semibold text-slate-400">정답을 입력하세요...</span>
-                                    <span v-else v-for="(char, idx) in quizText.split('')" :key="idx"
+                                <!-- Word Slot Display with Blanks -->
+                                <div class="flex justify-center gap-1.5 min-h-[44px] items-center overflow-x-auto py-1 bg-amber-50 rounded-xl border border-amber-200">
+                                    <span v-for="(char, idx) in currentWord.english.split('')" :key="idx"
                                           class="w-9 h-10 flex items-center justify-center rounded-lg font-mono font-black text-xl shadow-sm border-2"
-                                          :class="isQuizCharCorrect(char, idx) ? 'bg-green-100 text-green-700 border-green-500' : 'bg-rose-500 text-white border-rose-600'">
-                                        {{ char }}
+                                          :class="quizBlanks.includes(idx) ? 'bg-amber-200 border-amber-500 text-amber-900 font-bold' : 'bg-white border-slate-300 text-slate-700'">
+                                        {{ quizBlanks.includes(idx) ? '?' : char }}
                                     </span>
                                 </div>
 
@@ -316,7 +316,7 @@
                                            autocapitalize="off"
                                            autocorrect="off"
                                            spellcheck="false"
-                                           placeholder="정답 입력"
+                                           placeholder="전체 단어 입력"
                                            class="flex-1 h-12 px-3.5 bg-blue-50 border-2 border-purple-400 rounded-xl font-bold text-xl text-slate-900 focus:outline-none focus:border-purple-600 shadow-inner">
                                     <button @click="clearQuizInput" class="bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold px-3.5 rounded-xl text-sm transition flex-shrink-0 shadow-sm">
                                         🔄 초기화
@@ -324,10 +324,61 @@
                                 </div>
 
                                 <button @click="submitQuiz" class="w-full bg-purple-600 hover:bg-purple-700 text-white font-bold py-3 rounded-xl shadow-md text-base transition">
-                                    정답 제출하기
+                                    정답 제출 ({{ quizPart1Count }}/3회)
                                 </button>
+
+                                <!-- Progress Dots (Part 1) -->
+                                <div class="flex justify-center gap-2 pt-1">
+                                    <div v-for="i in 3" :key="i"
+                                         class="w-3.5 h-3.5 rounded-full transition-all"
+                                         :class="i <= quizPart1Count ? 'bg-amber-500 scale-110' : 'bg-slate-200'">
+                                    </div>
+                                </div>
                             </div>
                         </div>
+
+                        <!-- SUBSTAGE 2: Sound Blind Test (2 Tries) -->
+                        <div v-else class="space-y-3.5 bg-slate-800 text-white p-5 rounded-2xl shadow-md text-center">
+                            <div class="text-4xl animate-bounce">🎧</div>
+                            <div class="space-y-1">
+                                <h4 class="text-xl font-extrabold text-amber-300">소리만 듣고 스펠링 맞히기</h4>
+                                <p class="text-xs text-slate-300 font-medium">눈을 감고 발음에 집중한 뒤 전체 단어를 타이핑하세요!</p>
+                            </div>
+
+                            <button @click="speak(currentWord.english, 0.75)" class="bg-purple-500 hover:bg-purple-600 text-white font-bold px-4 py-2 rounded-xl text-sm shadow-sm transition inline-flex items-center gap-1.5">
+                                <span>🔊 발음 다시 듣기</span>
+                            </button>
+
+                            <div class="max-w-xs mx-auto space-y-2">
+                                <div class="flex gap-2">
+                                    <input ref="quizInput"
+                                           v-model="quizText"
+                                           @keyup.enter="submitQuiz"
+                                           type="text"
+                                           autocapitalize="off"
+                                           autocorrect="off"
+                                           spellcheck="false"
+                                           placeholder="단어 전체 입력"
+                                           class="flex-1 h-12 px-3.5 bg-slate-700 border-2 border-purple-400 rounded-xl font-bold text-xl text-white focus:outline-none focus:border-amber-400 shadow-inner text-center">
+                                    <button @click="clearQuizInput" class="bg-slate-600 hover:bg-slate-500 text-slate-200 font-bold px-3.5 rounded-xl text-sm transition flex-shrink-0 shadow-sm">
+                                        🔄
+                                    </button>
+                                </div>
+
+                                <button @click="submitQuiz" class="w-full bg-amber-500 hover:bg-amber-600 text-slate-900 font-black py-3 rounded-xl shadow-md text-base transition">
+                                    최종 제출 ({{ quizPart2Count }}/2회)
+                                </button>
+                            </div>
+
+                            <!-- Progress Dots (Part 2) -->
+                            <div class="flex justify-center gap-2 pt-1">
+                                <div v-for="i in 2" :key="i"
+                                     class="w-3.5 h-3.5 rounded-full transition-all"
+                                     :class="i <= quizPart2Count ? 'bg-amber-400 scale-110' : 'bg-slate-600'">
+                                </div>
+                            </div>
+                        </div>
+
                     </div>
                 </div>
             </div>
@@ -467,6 +518,12 @@
                 const practiceCount = ref(0);
                 const quizText = ref('');
                 const isDayCompleted = ref(false);
+
+                // Stage 2 Sub-State (1: Partial Blanks, 2: Sound Blind)
+                const quizSubStage = ref(1);
+                const quizPart1Count = ref(0);
+                const quizPart2Count = ref(0);
+                const quizBlanks = ref([]);
 
                 const practiceInput = ref(null);
                 const quizInput = ref(null);
@@ -770,7 +827,7 @@
                     resetDayProgress();
                 };
 
-                // [수정된 부분] 미완료된 첫 단어부터 탐색하여 위치 설정
+                // 미완료된 첫 단어부터 탐색하여 위치 설정
                 const resetDayProgress = (forceStartOver = false) => {
                     const firstUnlearnedIdx = currentWordList.value.findIndex(w => !isLearned(w));
 
@@ -790,6 +847,11 @@
                     practiceText.value = '';
                     practiceCount.value = 0;
                     quizText.value = '';
+                    quizSubStage.value = 1;
+                    quizPart1Count.value = 0;
+                    quizPart2Count.value = 0;
+                    quizBlanks.value = [];
+
                     focusInput();
                     if (!isDayCompleted.value && currentWord.value) speak(currentWord.value.english, 0.75);
                 };
@@ -820,8 +882,6 @@
                     return idx < target.length && char.toLowerCase() === target[idx].toLowerCase();
                 };
 
-                const isQuizCharCorrect = (char, idx) => isCharCorrect(char, idx);
-
                 const onPracticeInput = (e) => {
                     if (!currentWord.value) return;
                     const val = practiceText.value;
@@ -838,6 +898,32 @@
                     }
                 };
 
+                // 동적 빈칸 생성 함수 (단어 길이에 따른 동적 난이도 적용)
+                const generateQuizBlanks = (attemptNumber) => {
+                    if (!currentWord.value) return;
+                    const len = currentWord.value.english.length;
+                    let blankCount = 1;
+
+                    if (len <= 3) {
+                        blankCount = 1;
+                    } else if (len <= 6) {
+                        blankCount = (attemptNumber === 1) ? 1 : 2;
+                    } else {
+                        blankCount = (attemptNumber === 1) ? 2 : 3;
+                    }
+
+                    blankCount = Math.min(blankCount, len);
+
+                    const indices = [];
+                    while (indices.length < blankCount) {
+                        const rand = Math.floor(Math.random() * len);
+                        if (!indices.includes(rand)) {
+                            indices.push(rand);
+                        }
+                    }
+                    quizBlanks.value = indices;
+                };
+
                 const submitPractice = () => {
                     if (!currentWord.value) return;
                     const target = currentWord.value.english;
@@ -849,6 +935,11 @@
 
                         if (practiceCount.value >= 3) {
                             currentMode.value = 'quiz';
+                            quizSubStage.value = 1;
+                            quizPart1Count.value = 0;
+                            quizPart2Count.value = 0;
+                            quizText.value = '';
+                            generateQuizBlanks(1);
                             focusInput();
                         }
                     } else {
@@ -859,20 +950,48 @@
                 const submitQuiz = () => {
                     if (!currentWord.value) return;
                     const target = currentWord.value.english;
+
                     if (quizText.value.trim().toLowerCase() === target.toLowerCase()) {
                         playCorrectSound();
-                        markAsLearned(currentWord.value);
                         quizText.value = '';
-                        practiceText.value = '';
-                        practiceCount.value = 0;
-                        currentMode.value = 'practice';
 
-                        if (currentIndex.value + 1 < currentWordList.value.length) {
-                            currentIndex.value++;
-                            focusInput();
-                            speak(currentWord.value.english, 0.75);
-                        } else {
-                            isDayCompleted.value = true;
+                        // SUBSTAGE 1: Partial Blanks (3 Tries)
+                        if (quizSubStage.value === 1) {
+                            quizPart1Count.value++;
+                            if (quizPart1Count.value >= 3) {
+                                // Transition to SubStage 2 (Sound Blind Test)
+                                quizSubStage.value = 2;
+                                focusInput();
+                                speak(currentWord.value.english, 0.75);
+                            } else {
+                                generateQuizBlanks(quizPart1Count.value + 1);
+                                focusInput();
+                            }
+                        } 
+                        // SUBSTAGE 2: Sound Blind (2 Tries)
+                        else if (quizSubStage.value === 2) {
+                            quizPart2Count.value++;
+                            if (quizPart2Count.value >= 2) {
+                                // Stage 2 Fully Completed
+                                markAsLearned(currentWord.value);
+                                practiceText.value = '';
+                                practiceCount.value = 0;
+                                quizSubStage.value = 1;
+                                quizPart1Count.value = 0;
+                                quizPart2Count.value = 0;
+                                currentMode.value = 'practice';
+
+                                if (currentIndex.value + 1 < currentWordList.value.length) {
+                                    currentIndex.value++;
+                                    focusInput();
+                                    speak(currentWord.value.english, 0.75);
+                                } else {
+                                    isDayCompleted.value = true;
+                                }
+                            } else {
+                                focusInput();
+                                speak(currentWord.value.english, 0.75);
+                            }
                         }
                     } else {
                         playErrorSound();
@@ -928,12 +1047,13 @@
                 return {
                     activeScreen, allWords, learnedWordIDs, savedDate, currentWeek, selectedDay, days,
                     currentIndex, currentMode, practiceText, practiceCount, quizText, isDayCompleted,
+                    quizSubStage, quizPart1Count, quizPart2Count, quizBlanks,
                     practiceInput, quizInput, fileInput, showConfirmModal,
                     openConfirmModal, confirmLoadFile, cancelLoadFile, handleFileUpload,
                     availableWeeks, getWords, isLearned, isWeekUnlocked, isWeekCompleted,
                     isDayUnlocked, isDayDone, overallProgressRate, getWeekProgressRate, todayLesson, getDayBtnClass,
                     currentWordList, currentWord, learnedInDayCount, startLesson, changeDay, resetDayProgress,
-                    isCharCorrect, isQuizCharCorrect, onPracticeInput, submitPractice, submitQuiz, advanceToNextDay, resetProgress,
+                    isCharCorrect, onPracticeInput, submitPractice, submitQuiz, advanceToNextDay, resetProgress,
                     clearPracticeInput, clearQuizInput, speak, getWordImage, handleImgError
                 };
             }
