@@ -349,6 +349,17 @@
                                 <span>🔊 발음 다시 듣기</span>
                             </button>
 
+                            <!-- 힌트 안내 영역 (1차/2차) -->
+                            <div v-if="hintLevel > 0" class="bg-slate-700/90 border border-amber-400/60 p-3 rounded-xl max-w-xs mx-auto space-y-1 text-center shadow-inner">
+                                <div v-if="hintLevel === 1" class="text-amber-300 font-bold text-sm">
+                                    💡 1차 힌트: {{ currentWord.meaning }} <span class="font-mono text-base ml-1 text-white font-black">({{ getMaskedWord(currentWord.english) }})</span>
+                                </div>
+                                <div v-else-if="hintLevel === 2" class="text-green-300 font-bold text-sm">
+                                    💡 2차 힌트 (정답): <span class="font-mono text-lg font-black text-white underline decoration-amber-400 ml-1">{{ currentWord.english }}</span>
+                                    <p class="text-[11px] text-slate-300 font-medium mt-0.5">정답을 똑같이 1번 입력 후 제출하세요.</p>
+                                </div>
+                            </div>
+
                             <div class="max-w-xs mx-auto space-y-2">
                                 <div class="flex gap-2">
                                     <input ref="quizInput"
@@ -367,6 +378,13 @@
 
                                 <button @click="submitQuiz" class="w-full bg-amber-500 hover:bg-amber-600 text-slate-900 font-black py-3 rounded-xl shadow-md text-base transition">
                                     최종 제출 ({{ quizPart2Count }}/2회)
+                                </button>
+
+                                <!-- 2회 이상 실패 시 해금되는 힌트 버튼 -->
+                                <button v-if="soundBlindFailCount >= 2 && hintLevel < 2" 
+                                        @click="triggerHint" 
+                                        class="w-full bg-amber-400/20 hover:bg-amber-400/30 text-amber-300 border border-amber-400/50 font-bold py-2 rounded-xl text-xs transition flex items-center justify-center gap-1">
+                                    <span>{{ hintLevel === 0 ? '💡 힌트 보기 (뜻 + 글자 수)' : '💡 전체 정답 보기 (따라 쓰기)' }}</span>
                                 </button>
                             </div>
 
@@ -492,7 +510,6 @@
                 };
                 const playErrorSound = () => playSound(180, 'sawtooth', 0.2);
 
-                // [수정 포인트]: 이전 재생 취소 및 0.4초(400ms) 지연 재생 통합 로직
                 let speechTimer = null;
                 const speak = (text, rate = 0.7, delay = 400) => {
                     if ('speechSynthesis' in window) {
@@ -531,6 +548,10 @@
                 const quizPart1Count = ref(0);
                 const quizPart2Count = ref(0);
                 const quizBlanks = ref([]);
+
+                // Sound Blind Hint States
+                const soundBlindFailCount = ref(0);
+                const hintLevel = ref(0); // 0: 없음, 1: 1차(뜻+첫글자/길이), 2: 2차(전체정답+따라쓰기)
 
                 const practiceInput = ref(null);
                 const quizInput = ref(null);
@@ -834,7 +855,6 @@
                     resetDayProgress();
                 };
 
-                // 미완료된 첫 단어부터 탐색하여 위치 설정
                 const resetDayProgress = (forceStartOver = false) => {
                     const firstUnlearnedIdx = currentWordList.value.findIndex(w => !isLearned(w));
 
@@ -845,7 +865,6 @@
                         currentIndex.value = 0;
                         isDayCompleted.value = currentWordList.value.length > 0;
                     } else {
-                        // '다시 학습하기' 버튼을 누른 경우
                         currentIndex.value = 0;
                         isDayCompleted.value = false;
                     }
@@ -858,6 +877,9 @@
                     quizPart1Count.value = 0;
                     quizPart2Count.value = 0;
                     quizBlanks.value = [];
+
+                    soundBlindFailCount.value = 0;
+                    hintLevel.value = 0;
 
                     focusInput();
                     if (!isDayCompleted.value && currentWord.value) speak(currentWord.value.english, 0.75);
@@ -905,7 +927,6 @@
                     }
                 };
 
-                // 동적 빈칸 생성 함수 (단어 길이에 따른 동적 난이도 적용)
                 const generateQuizBlanks = (attemptNumber) => {
                     if (!currentWord.value) return;
                     const len = currentWord.value.english.length;
@@ -945,12 +966,30 @@
                             quizSubStage.value = 1;
                             quizPart1Count.value = 0;
                             quizPart2Count.value = 0;
+                            soundBlindFailCount.value = 0;
+                            hintLevel.value = 0;
                             quizText.value = '';
                             generateQuizBlanks(1);
                             focusInput();
                         }
                     } else {
                         playErrorSound();
+                    }
+                };
+
+                // 1차 힌트용 스펠링 가리기 (예: apple -> a _ _ _ _)
+                const getMaskedWord = (word) => {
+                    if (!word) return '';
+                    const first = word[0];
+                    const rest = ' _'.repeat(word.length - 1);
+                    return first + rest;
+                };
+
+                // 힌트 버튼 클릭 핸들러
+                const triggerHint = () => {
+                    if (hintLevel.value < 2) {
+                        hintLevel.value++;
+                        focusInput();
                     }
                 };
 
@@ -966,8 +1005,9 @@
                         if (quizSubStage.value === 1) {
                             quizPart1Count.value++;
                             if (quizPart1Count.value >= 3) {
-                                // Transition to SubStage 2 (Sound Blind Test)
                                 quizSubStage.value = 2;
+                                soundBlindFailCount.value = 0;
+                                hintLevel.value = 0;
                                 focusInput();
                                 speak(currentWord.value.english, 0.75);
                             } else {
@@ -977,15 +1017,43 @@
                         } 
                         // SUBSTAGE 2: Sound Blind (2 Tries)
                         else if (quizSubStage.value === 2) {
-                            quizPart2Count.value++;
-                            if (quizPart2Count.value >= 2) {
-                                // Stage 2 Fully Completed
+                            
+                            // 2차 힌트(전체 정답 따라쓰기) 상태였으면 입력 후 바로 완주
+                            if (hintLevel.value === 2) {
                                 markAsLearned(currentWord.value);
                                 practiceText.value = '';
                                 practiceCount.value = 0;
                                 quizSubStage.value = 1;
                                 quizPart1Count.value = 0;
                                 quizPart2Count.value = 0;
+                                soundBlindFailCount.value = 0;
+                                hintLevel.value = 0;
+                                currentMode.value = 'practice';
+
+                                if (currentIndex.value + 1 < currentWordList.value.length) {
+                                    currentIndex.value++;
+                                    focusInput();
+                                    speak(currentWord.value.english, 0.75);
+                                } else {
+                                    isDayCompleted.value = true;
+                                }
+                                return;
+                            }
+
+                            // 일반 정답 및 1차 힌트 확인 후 정답 성공 시
+                            quizPart2Count.value++;
+                            soundBlindFailCount.value = 0;
+                            hintLevel.value = 0;
+
+                            if (quizPart2Count.value >= 2) {
+                                markAsLearned(currentWord.value);
+                                practiceText.value = '';
+                                practiceCount.value = 0;
+                                quizSubStage.value = 1;
+                                quizPart1Count.value = 0;
+                                quizPart2Count.value = 0;
+                                soundBlindFailCount.value = 0;
+                                hintLevel.value = 0;
                                 currentMode.value = 'practice';
 
                                 if (currentIndex.value + 1 < currentWordList.value.length) {
@@ -1002,6 +1070,9 @@
                         }
                     } else {
                         playErrorSound();
+                        if (quizSubStage.value === 2) {
+                            soundBlindFailCount.value++;
+                        }
                     }
                 };
 
@@ -1055,6 +1126,7 @@
                     activeScreen, allWords, learnedWordIDs, savedDate, currentWeek, selectedDay, days,
                     currentIndex, currentMode, practiceText, practiceCount, quizText, isDayCompleted,
                     quizSubStage, quizPart1Count, quizPart2Count, quizBlanks,
+                    soundBlindFailCount, hintLevel, getMaskedWord, triggerHint,
                     practiceInput, quizInput, fileInput, showConfirmModal,
                     openConfirmModal, confirmLoadFile, cancelLoadFile, handleFileUpload,
                     availableWeeks, getWords, isLearned, isWeekUnlocked, isWeekCompleted,
