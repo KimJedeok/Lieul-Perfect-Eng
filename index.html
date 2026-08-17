@@ -492,13 +492,20 @@
                 };
                 const playErrorSound = () => playSound(180, 'sawtooth', 0.2);
 
-                const speak = (text, rate = 0.7) => {
+                // [수정 포인트]: 이전 재생 취소 및 0.4초(400ms) 지연 재생 통합 로직
+                let speechTimer = null;
+                const speak = (text, rate = 0.7, delay = 400) => {
                     if ('speechSynthesis' in window) {
                         window.speechSynthesis.cancel();
-                        const utterance = new SpeechSynthesisUtterance(text);
-                        utterance.lang = 'en-US';
-                        utterance.rate = rate;
-                        window.speechSynthesis.speak(utterance);
+                        if (speechTimer) {
+                            clearTimeout(speechTimer);
+                        }
+                        speechTimer = setTimeout(() => {
+                            const utterance = new SpeechSynthesisUtterance(text);
+                            utterance.lang = 'en-US';
+                            utterance.rate = rate;
+                            window.speechSynthesis.speak(utterance);
+                        }, delay);
                     }
                 };
 
