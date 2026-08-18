@@ -146,7 +146,7 @@
                     <div class="flex justify-between items-center flex-shrink-0">
                         <h3 class="text-sm font-extrabold text-purple-800 flex items-center gap-1">🎯 주차별 학습 로드맵 ✨</h3>
                         <button @click="resetProgress" class="text-[11px] font-extrabold text-pink-500 bg-pink-50 hover:bg-pink-100 px-2.5 py-1 rounded-lg border border-pink-200 transition">
-                            🔄 진도 초기화
+                            🔄 전체 진도 초기화
                         </button>
                     </div>
 
@@ -158,7 +158,13 @@
                                     <span v-if="!isWeekUnlocked(week)" class="text-xs">🔒</span>
                                     <span v-else-if="isWeekCompleted(week)" class="bg-emerald-100 text-emerald-600 text-[10px] font-extrabold px-2 py-0.5 rounded-full">완주 성공! 🎉</span>
                                 </div>
-                                <span class="text-xs font-extrabold text-pink-500">{{ Math.round(getWeekProgressRate(week) * 100) }}%</span>
+                                <div class="flex items-center gap-2">
+                                    <!-- 주차별 리셋 버튼 -->
+                                    <button @click="resetWeekProgress(week)" class="text-[10px] font-extrabold text-pink-500 bg-pink-50 hover:bg-pink-100 px-2 py-0.5 rounded-lg border border-pink-200 transition">
+                                        🔄 주차 리셋
+                                    </button>
+                                    <span class="text-xs font-extrabold text-pink-500">{{ Math.round(getWeekProgressRate(week) * 100) }}%</span>
+                                </div>
                             </div>
 
                             <div class="grid grid-cols-6 gap-1.5">
@@ -190,8 +196,14 @@
                     🎀 {{ currentWeek }}주차 ({{ selectedDay === 'Sat' ? '토요일 복습' : selectedDay }})
                 </div>
 
-                <div class="text-xs font-extrabold text-pink-400">
-                    {{ stage3Active ? '✨ 3단계 테스트' : '🌸 즐거운 학습' }}
+                <div class="flex items-center gap-2">
+                    <!-- 요일별 리셋 버튼 -->
+                    <button @click="resetCurrentDayData" class="bg-pink-50 hover:bg-pink-100 font-extrabold text-pink-500 px-2.5 py-1.5 rounded-xl text-xs border border-pink-200 transition active:scale-95">
+                        🔄 요일 리셋
+                    </button>
+                    <div class="text-xs font-extrabold text-pink-400">
+                        {{ stage3Active ? '✨ 3단계 테스트' : '🌸 즐거운 학습' }}
+                    </div>
                 </div>
             </div>
 
@@ -931,6 +943,7 @@
 
                     allWords.value = parsed;
                     learnedWordIDs.value = [];
+                    wordStats.value = {};
                     const now = new Date();
                     const formattedDate = `${now.getFullYear()}.${String(now.getMonth()+1).padStart(2, '0')}.${String(now.getDate()).padStart(2, '0')} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
                     savedDate.value = formattedDate;
@@ -938,6 +951,7 @@
                     try {
                         localStorage.setItem('vocab_all_words', JSON.stringify(parsed));
                         localStorage.setItem('vocab_learned_ids', JSON.stringify([]));
+                        localStorage.setItem('vocab_word_stats', JSON.stringify({}));
                         localStorage.setItem('vocab_saved_date', formattedDate);
                     } catch (e) {}
 
@@ -1027,6 +1041,64 @@
                     resetDayProgress();
                 };
 
+                // ==========================================
+                // [진도 및 정답률 초기화 로직]
+                // ==========================================
+
+                // 공통 데이터 초기화 함수 (지정된 단어 ID 목록의 learnedWordIDs 및 wordStats 삭제)
+                const resetDataByWordIds = (targetWordIds) => {
+                    if (!targetWordIds || targetWordIds.length === 0) return;
+
+                    // 1. learnedWordIDs에서 제거
+                    learnedWordIDs.value = learnedWordIDs.value.filter(id => !targetWordIds.includes(id));
+
+                    // 2. wordStats 정답률 객체에서 해당 단어 제거
+                    targetWordIds.forEach(id => {
+                        delete wordStats.value[id];
+                    });
+
+                    // 3. localStorage 저장
+                    try {
+                        localStorage.setItem('vocab_learned_ids', JSON.stringify(learnedWordIDs.value));
+                        localStorage.setItem('vocab_word_stats', JSON.stringify(wordStats.value));
+                    } catch (e) {}
+                };
+
+                // 1) 홈 화면: 주차 전체 초기화
+                const resetWeekProgress = (targetWeek) => {
+                    if (!confirm(`${targetWeek}주차의 모든 진도와 정답률 기록을 초기화하시겠습니까? 🌸`)) return;
+
+                    const targetIds = allWords.value
+                        .filter(w => w.week === targetWeek)
+                        .map(w => w.id);
+
+                    resetDataByWordIds(targetIds);
+                };
+
+                // 2) 학습 화면: 요일별 초기화
+                const resetCurrentDayData = () => {
+                    const dayLabel = selectedDay.value === 'Sat' ? '토요일(복습)' : `${selectedDay.value}요일`;
+                    if (!confirm(`${currentWeek.value}주차 ${dayLabel} 학습 기록 및 정답률을 초기화하시겠습니까? 🌸`)) return;
+
+                    const targetIds = getWords(currentWeek.value, selectedDay.value).map(w => w.id);
+
+                    resetDataByWordIds(targetIds);
+                    resetDayProgress(true); // 학습 화면 진행 상태도 1단계 처음으로 리셋
+                };
+
+                // 3) 전체 초기화
+                const resetProgress = () => {
+                    if (confirm('정말로 모든 학습 진도와 정답률을 초기화하시겠습니까? 🌸')) {
+                        learnedWordIDs.value = [];
+                        wordStats.value = {};
+                        try {
+                            localStorage.setItem('vocab_learned_ids', JSON.stringify([]));
+                            localStorage.setItem('vocab_word_stats', JSON.stringify({}));
+                        } catch (e) {}
+                    }
+                };
+
+                // 학습 UI 세션 리셋 (화면 진행 상태 1단계 처음으로)
                 const resetDayProgress = (forceStartOver = false) => {
                     stage3Active.value = false;
                     const firstUnlearnedIdx = currentWordList.value.findIndex(w => !isLearned(w));
@@ -1404,12 +1476,6 @@
                     resetDayProgress();
                 };
 
-                const resetProgress = () => {
-                    if (confirm('정말로 모든 학습 진도를 초기화하시겠습니까? 🌸')) {
-                        learnedWordIDs.value = [];
-                    }
-                };
-
                 const getWordImage = (word) => {
                     if (!word) return '';
                     if (word.imageFileName) {
@@ -1447,6 +1513,7 @@
                     isDayUnlocked, isDayDone, overallProgressRate, getWeekProgressRate, todayLesson, getDayBtnClass,
                     currentWordList, currentWord, learnedInDayCount, startLesson, changeDay, resetDayProgress,
                     isCharCorrect, onPracticeInput, onQuizInput, submitPractice, submitQuiz, advanceToNextDay, resetProgress,
+                    resetWeekProgress, resetCurrentDayData,
                     clearPracticeInput, clearQuizInput, speak, speakSequence, getWordImage, handleImgError,
                     startStage3, clearCanvas, clearCanvasStrokesOnly, revealPencilAnswer,
                     getMaskedExample, getHighlightedExampleMeaning, submitStage3MCQ, nextStage3Question
